@@ -6,3 +6,6 @@
 
 # Rust のビルド生成物（scripts/build-wasm.sh）
 target/
+
+# netlify link が作る、つないだ Netlify サイトの情報
+.netlify/

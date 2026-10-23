@@ -4,8 +4,10 @@ import { createRoot } from "react-dom/client";
 import App from "./App";
 import init from "./core/retroboyCore";
 import registerCartridgeEffects from "./emulator/cartridgeEffects";
+import registerServiceWorker from "./pwa/registerServiceWorker";
 
 registerCartridgeEffects();
+registerServiceWorker();
 
 const root = createRoot(document.getElementById("root") as HTMLElement);
 

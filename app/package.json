@@ -6,11 +6,12 @@
     "scripts": {
         "build:wasm": "../scripts/build-wasm.sh",
         "dev": "vite",
-        "build": "tsc --noEmit && vite build",
+        "build": "tsc --noEmit && vite build && node scripts/generate-sw.mjs",
         "preview": "vite preview",
         "typecheck": "tsc --noEmit",
         "lint": "eslint .",
-        "check": "npm run build:wasm && npm run typecheck && npm run lint && vite build"
+        "check": "npm run build:wasm && npm run typecheck && npm run lint && vite build && node scripts/generate-sw.mjs",
+        "deploy": "npm run check && cd .. && npx --yes netlify-cli@27.14.2 deploy --prod --no-build --dir=app/dist"
     },
     "dependencies": {
         "react": "^19.2.0",

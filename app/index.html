@@ -8,6 +8,20 @@
             content="width=device-width, initial-scale=1, viewport-fit=cover"
         />
         <meta name="color-scheme" content="dark" />
+        <!-- 個人用。検索エンジンに載せない（netlify.toml の X-Robots-Tag と二重に） -->
+        <meta name="robots" content="noindex, nofollow" />
+        <!-- ホーム画面のアプリ（PWA）。色は暗い背景に合わせる -->
+        <meta name="theme-color" content="#0e0d12" />
+        <link rel="manifest" href="/manifest.webmanifest" />
+        <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="mobile-web-app-capable" content="yes" />
+        <!-- black-translucent: ステータスバーを透かし、暗い背景の上に白い文字で出す（viewport-fit=cover と組で使う） -->
+        <meta
+            name="apple-mobile-web-app-status-bar-style"
+            content="black-translucent"
+        />
+        <meta name="apple-mobile-web-app-title" content="Retro Boy" />
         <title>Retro Boy Snap</title>
         <style>
             html,

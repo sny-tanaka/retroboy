@@ -1,0 +1,51 @@
+# Netlify の設定。ビルドは手元で行い（Rust・wasm-pack を Netlify 側に用意しないため）、
+# できた app/dist を netlify-cli で上げる（README「Netlify に公開する」）。
+# 見られるのはチームオーナーだけ（Netlify の Project visibility を Private にする）。
+
+[build]
+# Netlify 側ではビルドしない（command を書かない）
+publish = "app/dist"
+
+# 画面は 1 枚だけ（/ の index.html）でパスによる振り分けが無いので、SPA の書き換え（/* → /index.html）は置かない。
+
+# すべてのファイル: 検索エンジンに載せない
+[[headers]]
+for = "/*"
+[headers.values]
+X-Robots-Tag = "noindex, nofollow"
+X-Content-Type-Options = "nosniff"
+Referrer-Policy = "no-referrer"
+
+# index.html と Service Worker と manifest: 毎回サーバーに確かめる（新しい版がすぐ届くように）
+[[headers]]
+for = "/"
+[headers.values]
+Cache-Control = "no-cache"
+
+[[headers]]
+for = "/index.html"
+[headers.values]
+Cache-Control = "no-cache"
+
+[[headers]]
+for = "/sw.js"
+[headers.values]
+Cache-Control = "no-cache"
+
+[[headers]]
+for = "/manifest.webmanifest"
+[headers.values]
+Cache-Control = "no-cache"
+Content-Type = "application/manifest+json"
+
+# Vite がハッシュ付きの名前で出す JS・CSS・WASM: 中身が変われば名前が変わるので長くキャッシュする
+[[headers]]
+for = "/assets/*"
+[headers.values]
+Cache-Control = "public, max-age=31536000, immutable"
+
+# WASM は application/wasm で返す（WebAssembly.instantiateStreaming に要る）
+[[headers]]
+for = "/assets/*.wasm"
+[headers.values]
+Content-Type = "application/wasm"
