@@ -4,7 +4,8 @@
 // Copyright smparsons. Licensed under the Apache License, Version 2.0.
 // 変更点: React コンポーネントから切り出し、エラーは戻り値で返すようにした。
 //   blob URL の解放を 1 秒遅らせた（iOS Safari 対策）。6 バイト未満のファイルはコアに渡さない（panic するため）。
-//   セーブステートは本家と同じく .rbs ファイルとしてダウンロード／ファイルから読み込む（端末内に保存はしない）。
+//   .rbs ファイルのダウンロード／読み込みに加え、端末内の枠（storage/romDb.ts の saveStates）に
+//   保存するためのバイト列の取り出し（captureSaveState）と、バイト列からの適用（applySaveStateBytes）を足した。
 import { applySaveState, encodeSaveState } from "../core/retroboyCore";
 
 const REVOKE_DELAY = 1000;
@@ -53,6 +54,26 @@ export const downloadSaveState = (romFilename: string): string | null => {
         );
     }
     return null;
+};
+
+// いまの状態をバイト列にする（端末内の枠に保存する用）。呼んだ瞬間の状態を、コアから切り離したコピーで返す
+export const captureSaveState = ():
+    | { data: ArrayBuffer }
+    | { error: string } => {
+    const result = encodeSaveState();
+    if (result.error || !result.saveState) {
+        return { error: result.error ?? "" };
+    }
+    return { data: result.saveState.slice().buffer };
+};
+
+// バイト列のセーブステートを適用する。失敗時はエラー文を返す。別のゲームのセーブステートならコア側でエラーになる
+export const applySaveStateBytes = (data: Uint8Array): string | null => {
+    // コアは長さを確かめる前に先頭 6 バイト（"HEADER"）を切り出すので、短いと panic して WASM が使えなくなる
+    if (data.length < MIN_SAVE_STATE_LENGTH) {
+        return "セーブステートのデータではないようです。";
+    }
+    return applySaveState(data) ?? null;
 };
 
 // .rbs ファイルを読み込んで適用する。別のゲームのセーブステートならコア側でエラーになる。

@@ -69,15 +69,31 @@ export const ConfirmDialog = ({
 };
 
 /** セーブステートを読み込む前の確認（上の「ロード」とメニューの「ファイルから読み込む」で共通） */
-export const LoadStateConfirm = (
-    props: Pick<ConfirmDialogProps, "open" | "onConfirm" | "onCancel">,
-) => (
+export const LoadStateConfirm = ({
+    savedAt,
+    ...props
+}: Pick<ConfirmDialogProps, "open" | "onConfirm" | "onCancel"> & {
+    /** 端末内のセーブから戻すときの、そのセーブの日時。無ければファイルから読み込む */
+    readonly savedAt?: number;
+}) => (
     <ConfirmDialog
         title="ロードしますか？"
-        message="いまの進みは、選んだセーブステートの状態で上書きされます。"
+        message={
+            savedAt === undefined
+                ? "いまの進みは、選んだセーブステートの状態で上書きされます。"
+                : `いまの進みは、${formatSavedAt(savedAt)} にセーブした状態で上書きされます。`
+        }
         confirmLabel="ロードする"
         {...props}
     />
 );
+
+const formatSavedAt = (time: number): string =>
+    new Date(time).toLocaleString("ja-JP", {
+        month: "numeric",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+    });
 
 export default ConfirmDialog;

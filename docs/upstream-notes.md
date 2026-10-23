@@ -100,7 +100,8 @@
 
 ## セーブステート
 
-- コアの `encodeSaveState()` がバイト列を返すだけで、**本家は端末内に保存しない**。`.rbs` ファイルとしてダウンロードし、ファイル選択で読み込んで `applySaveState()` に渡す（本家 `frontends/web/src/interface.tsx` の `saveState` / `handleLoadStateChange`）。このアプリも同じ（`app/src/emulator/saveState.ts`）。
+- コアの `encodeSaveState()` がバイト列を返すだけで、**本家は端末内に保存しない**。`.rbs` ファイルとしてダウンロードし、ファイル選択で読み込んで `applySaveState()` に渡す（本家 `frontends/web/src/interface.tsx` の `saveState` / `handleLoadStateChange`）。このアプリもメニューの「セーブステート（ファイル）」で同じことができる（`app/src/emulator/saveState.ts`）。
+- このアプリでは加えて、画面の「セーブ」で `encodeSaveState()` のバイト列を IndexedDB `retroboy-snap` の `saveStates` ストア（DB の版 2 で追加。キーは ROM の ID、ROM ごとに 1 件で上書き）に保存し、「ロード」で同じ `applySaveState()` に渡す。ファイルと同じく、6 バイト未満はコアに渡さない。書き込みと読み出しは 1 本の列に並べ、連打しても押した順に書き、ロードは手前のセーブの完了を待つ。
 - 形式（`src/emulator/save_state.rs`）: `"HEADER"` + 版（1 バイト、いまは 7）+ タイトル長（1 バイト）+ タイトル + `"STATE"` + エミュレーター全体の状態。
 - 適用時にタイトルが今のゲームと違えばエラー（「This save state is meant to be used for a different game…」）。版が違ってもエラー。**本家のコミットを上げるとセーブステートの版が変わって古いものが読めなくなることがある**。
 - セーブステートにはカートリッジ RAM も含まれ、適用すると RAM も巻き戻る（そのあと書き込みがあれば localStorage のセーブ RAM も上書きされる）。

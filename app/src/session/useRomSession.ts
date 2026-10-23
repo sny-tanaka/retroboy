@@ -1,4 +1,5 @@
 // 画面の状態とロジック（ROM の保存・自動読み込み・起動・停止・セーブステート）。
+// セーブステートは、画面の「セーブ」「ロード」が端末内の枠（ROM ごとに 1 件）を、メニューが .rbs ファイルを使う。
 // 見た目（App.tsx）からはこのフックの戻り値だけを使う。③ で見た目を差し替えるときもここは変えずに済むようにする。
 //
 // 起動の流れ（設計書 4 章）:
@@ -18,14 +19,21 @@ import {
     onSaveError,
     setActiveRomId,
 } from "../emulator/cartridgeEffects";
-import { downloadSaveState, loadSaveStateFile } from "../emulator/saveState";
+import {
+    applySaveStateBytes,
+    captureSaveState,
+    downloadSaveState,
+    loadSaveStateFile,
+} from "../emulator/saveState";
 import useAudioSync from "../emulator/useAudioSync";
 import { useKeyListeners } from "../emulator/useKeyListeners";
 import {
     getLastRomId,
+    getSaveState,
     importRom,
     listRoms,
     loadRom,
+    putSaveState,
     type RomRecord,
     RomStorageError,
     type RomSummary,
@@ -55,6 +63,18 @@ export type SessionStatus =
           readonly message: string;
           readonly retry: () => void;
       };
+
+// いまの ROM のセーブステートの枠
+export type SaveSlot =
+    // 端末から読んでいる
+    | { readonly kind: "checking" }
+    | { readonly kind: "empty" }
+    | { readonly kind: "saved"; readonly savedAt: number }
+    // 読めなかった（ロードを押せば改めて読む）
+    | { readonly kind: "unreadable" };
+
+// 「セーブしました」などを出しておく時間
+const FLASH_MS = 1500;
 
 type GameBoyMode = "DMG" | "CGB";
 
@@ -129,6 +149,19 @@ const useRomSession = () => {
     // ready / running の ROM の本体（止めたあとにもう一度始めるのに使う）。状態には一覧と同じ要約だけを置く
     const currentRomRef = useRef<RomRecord | null>(null);
     const bootedRef = useRef(false);
+    // セーブステートの枠。どの ROM のものかと一緒に持ち、ROM が変わったら読み直すまで "checking" とみなす
+    const [slotState, setSlotState] = useState<{
+        readonly romId: string;
+        readonly slot: SaveSlot;
+    } | null>(null);
+    // 一瞬だけ出す知らせ（「セーブしました」など）。key は同じ文言を続けて出したときに出し直すため
+    const [flash, setFlash] = useState<{
+        readonly key: number;
+        readonly message: string;
+    } | null>(null);
+    const flashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    // 枠への書き込み・読み出しを 1 本の列に並べる。連打しても押した順に書き、ロードは手前のセーブの完了を待つ
+    const slotQueueRef = useRef<Promise<unknown>>(Promise.resolve());
     // 読み込みの世代。「再試行」の連打などで読み込みが並んだとき、古い結果で状態を上書きしない
     const requestRef = useRef(0);
 
@@ -137,6 +170,18 @@ const useRomSession = () => {
         const request = ++requestRef.current;
         return () => request === requestRef.current;
     };
+
+    // 非同期の処理の終わりで「まだ同じ ROM か」を確かめるための、最新の値
+    const slotRomIdRef = useRef<string | null>(null);
+    const runningRomIdRef = useRef<string | null>(null);
+    useEffect(() => {
+        slotRomIdRef.current =
+            status.kind === "ready" || status.kind === "running"
+                ? status.rom.id
+                : null;
+        runningRomIdRef.current =
+            status.kind === "running" ? status.rom.id : null;
+    }, [status]);
 
     const playing = status.kind === "running" && !status.paused;
     const paused = status.kind === "running" && status.paused;
@@ -279,6 +324,50 @@ const useRomSession = () => {
 
     useEffect(() => onSaveError(setNotice), []);
 
+    // 枠を持つ ROM（開始待ち・遊んでいる）
+    const slotRomId =
+        status.kind === "ready" || status.kind === "running"
+            ? status.rom.id
+            : null;
+    const slot: SaveSlot =
+        slotState && slotState.romId === slotRomId
+            ? slotState.slot
+            : { kind: "checking" };
+
+    const setSlotFor = (romId: string, next: SaveSlot): void =>
+        setSlotState({ romId, slot: next });
+
+    // ROM が変わったら、その ROM の枠に保存があるかを読む
+    useEffect(() => {
+        if (!slotRomId) return;
+        let alive = true;
+        const romId = slotRomId;
+        const check = enqueueSlot(() => getSaveState(romId));
+        check
+            .then(record => {
+                if (!alive) return;
+                setSlotFor(
+                    romId,
+                    record
+                        ? { kind: "saved", savedAt: record.savedAt }
+                        : { kind: "empty" },
+                );
+            })
+            .catch(() => {
+                if (alive) setSlotFor(romId, { kind: "unreadable" });
+            });
+        return () => {
+            alive = false;
+        };
+    }, [slotRomId]);
+
+    useEffect(
+        () => () => {
+            if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
+        },
+        [],
+    );
+
     // 「タップして開始」
     const startReadyRom = (): void => {
         const rom = currentRomRef.current;
@@ -325,7 +414,71 @@ const useRomSession = () => {
             current.kind === "running" ? { ...current, paused: false } : current,
         );
 
-    const saveState = (): void => {
+    const showFlash = (message: string): void => {
+        if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
+        setFlash(current => ({ key: (current?.key ?? 0) + 1, message }));
+        flashTimerRef.current = setTimeout(() => {
+            flashTimerRef.current = null;
+            setFlash(null);
+        }, FLASH_MS);
+    };
+
+    // 枠の処理を列の最後に足す（前の処理が失敗しても続ける）
+    function enqueueSlot<T>(task: () => Promise<T>): Promise<T> {
+        const next = slotQueueRef.current.then(task, task);
+        slotQueueRef.current = next.catch(() => undefined);
+        return next;
+    }
+
+    // 画面の「セーブ」。押した瞬間の状態を取り、ROM の枠に上書きする（ゲームは止めない）
+    const saveToSlot = (): void => {
+        if (status.kind !== "running") return;
+        const romId = status.rom.id;
+        const captured = captureSaveState();
+        if ("error" in captured) {
+            setNotice(
+                `セーブできませんでした。${captured.error}`.trim(),
+            );
+            return;
+        }
+        void enqueueSlot(() => putSaveState(romId, captured.data)).then(
+            savedAt => {
+                // 書き終わる前に ROM を切り替えていたら、枠の表示も知らせも出さない（切り替え先の枠は別に読む）
+                if (romId !== slotRomIdRef.current) return;
+                setSlotFor(romId, { kind: "saved", savedAt });
+                showFlash("セーブしました");
+            },
+            (err: unknown) =>
+                setNotice(messageOf(err, "セーブできませんでした。")),
+        );
+    };
+
+    // 画面の「ロード」（確認のあと）。ROM の枠から戻す。手前のセーブが終わるのを待ってから読む
+    const loadFromSlot = async (): Promise<void> => {
+        if (status.kind !== "running") return;
+        const romId = status.rom.id;
+        try {
+            const record = await enqueueSlot(() => getSaveState(romId));
+            // 読んでいる間に ROM を切り替えた・止めたなら、何もしない
+            if (romId !== runningRomIdRef.current) return;
+            if (!record) {
+                setSlotFor(romId, { kind: "empty" });
+                showFlash("セーブがありません");
+                return;
+            }
+            const error = applySaveStateBytes(new Uint8Array(record.data));
+            if (error !== null) {
+                setNotice(`ロードできませんでした。${error}`.trim());
+                return;
+            }
+            showFlash("ロードしました");
+        } catch (err) {
+            setNotice(messageOf(err, "セーブを読み込めませんでした。"));
+        }
+    };
+
+    // メニューの「ファイルに書き出す」
+    const exportStateFile = (): void => {
         if (status.kind === "running") {
             setNotice(downloadSaveState(status.rom.name));
         }
@@ -350,7 +503,11 @@ const useRomSession = () => {
         pause,
         resume,
         stop: startReset,
-        saveState,
+        slot,
+        flash,
+        saveToSlot,
+        loadFromSlot,
+        exportStateFile,
         loadState,
     };
 };

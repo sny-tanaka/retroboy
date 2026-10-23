@@ -34,6 +34,8 @@ export interface GbcBodyProps extends GbButtonHandlers {
     readonly onSaveState: () => void;
     /** 「ロード」を押した。上書きの確認（ConfirmDialog）は呼ぶ側で出す */
     readonly onLoadState: () => void;
+    /** false のとき「ロード」を押せなくする（セーブが無いとき）。既定は true */
+    readonly canLoadState?: boolean;
     readonly onOpenMenu: () => void;
     /** メニューや確認を開いている間は true にして、本体を操作できなくする（Tab でも届かない） */
     readonly inert?: boolean;
@@ -99,6 +101,7 @@ export const GbcBody = ({
     onTogglePause,
     onSaveState,
     onLoadState,
+    canLoadState = true,
     onOpenMenu,
     inert = false,
     gameActive = true,
@@ -188,7 +191,7 @@ export const GbcBody = ({
                             type="button"
                             className="gbc-sub-button gbc-state-button"
                             onClick={onLoadState}
-                            disabled={!gameActive}
+                            disabled={!gameActive || !canLoadState}
                         >
                             <LoadIcon />
                             ロード

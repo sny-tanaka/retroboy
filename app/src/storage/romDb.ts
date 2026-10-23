@@ -1,11 +1,14 @@
-// ROM を端末内（IndexedDB）に保存する。設計書 3 章の roms / settings ストア。
+// ROM を端末内（IndexedDB）に保存する。設計書 3 章の roms / settings ストアと、
+// 画面の「セーブ」「ロード」で使うセーブステートの枠（saveStates ストア、ROM ごとに 1 件）。
 // ROM はここ以外へは出さない（外部への送信・ログ出力をしない）。
 import { computeRomId } from "./romId";
 
 const DB_NAME = "retroboy-snap";
-const DB_VERSION = 1;
+// 版 1: roms / settings。版 2: saveStates を足した
+const DB_VERSION = 2;
 const ROMS_STORE = "roms";
 const SETTINGS_STORE = "settings";
+const SAVE_STATES_STORE = "saveStates";
 const LAST_ROM_ID_KEY = "lastRomId";
 
 export interface RomRecord {
@@ -16,6 +19,13 @@ export interface RomRecord {
 }
 
 export type RomSummary = Omit<RomRecord, "data">;
+
+// セーブステートの枠。ROM ごとに 1 件で、セーブするたびに上書きする
+export interface SaveStateRecord {
+    readonly romId: string;
+    readonly data: ArrayBuffer;
+    readonly savedAt: number;
+}
 
 interface SettingRecord {
     readonly key: string;
@@ -66,6 +76,7 @@ const openDb = (): Promise<IDBDatabase> => {
                 reject(new Error("IndexedDB is not available"));
                 return;
             }
+            let blocked = false;
             const request = indexedDB.open(DB_NAME, DB_VERSION);
             request.onupgradeneeded = () => {
                 // 版を上げるときは既存のストアを消さずに足すこと（保存済みの ROM が消える）
@@ -76,9 +87,17 @@ const openDb = (): Promise<IDBDatabase> => {
                 if (!db.objectStoreNames.contains(SETTINGS_STORE)) {
                     db.createObjectStore(SETTINGS_STORE, { keyPath: "key" });
                 }
+                if (!db.objectStoreNames.contains(SAVE_STATES_STORE)) {
+                    db.createObjectStore(SAVE_STATES_STORE, { keyPath: "romId" });
+                }
             };
             request.onsuccess = () => {
                 const db = request.result;
+                // blocked で先に諦めたあとに開けたときは、使わないので閉じる（ほかの版上げを止めないように）
+                if (blocked) {
+                    db.close();
+                    return;
+                }
                 // 別のタブが新しい版で開こうとしたら閉じて譲る（次の呼び出しで開き直す）
                 db.onversionchange = () => {
                     db.close();
@@ -88,8 +107,16 @@ const openDb = (): Promise<IDBDatabase> => {
                 resolve(db);
             };
             request.onerror = () => reject(request.error);
-            request.onblocked = () =>
-                reject(new Error("IndexedDB open is blocked by another tab"));
+            // 版上げのとき、古い版のまま開いている別のタブ・ウィンドウが閉じてくれないと待たされる。
+            // 待ち続けず知らせる（このアプリの版 1 以降は versionchange で閉じるので、ふつうは起きない）
+            request.onblocked = () => {
+                blocked = true;
+                reject(
+                    new RomStorageError(
+                        "別のタブかウィンドウで、このアプリの古い版が開いています。閉じてから再試行してください。",
+                    ),
+                );
+            };
         },
     ).catch((err: unknown) => {
         // 失敗を覚えておかず、再試行で開き直せるようにする
@@ -260,4 +287,52 @@ export const setLastRomId = (id: string): Promise<void> =>
                 .put({ key: LAST_ROM_ID_KEY, value: id } satisfies SettingRecord);
             return done;
         });
+    });
+
+// 枠に保存する（上書き）。トランザクションの完了まで待ち、保存した日時を返す
+export const putSaveState = (romId: string, data: ArrayBuffer): Promise<number> =>
+    wrap("セーブできませんでした。", async () => {
+        const savedAt = Date.now();
+        try {
+            await withDb(db => {
+                const transaction = db.transaction(
+                    SAVE_STATES_STORE,
+                    "readwrite",
+                );
+                const done = transactionDone(transaction);
+                transaction.objectStore(SAVE_STATES_STORE).put({
+                    romId,
+                    data,
+                    savedAt,
+                } satisfies SaveStateRecord);
+                return done;
+            });
+        } catch (err) {
+            if (err instanceof DOMException && err.name === "QuotaExceededError") {
+                throw new RomStorageError(
+                    "端末の保存領域が足りず、セーブできませんでした。",
+                    { cause: err },
+                );
+            }
+            throw err;
+        }
+        return savedAt;
+    });
+
+// 枠を読む。空なら null
+export const getSaveState = (romId: string): Promise<SaveStateRecord | null> =>
+    wrap("セーブを読み込めませんでした。", async () => {
+        const record = await withDb(db =>
+            requestToPromise<SaveStateRecord | undefined>(
+                db
+                    .transaction(SAVE_STATES_STORE, "readonly")
+                    .objectStore(SAVE_STATES_STORE)
+                    .get(romId),
+            ),
+        );
+        if (!record) return null;
+        if (!(record.data instanceof ArrayBuffer)) {
+            throw new RomStorageError("セーブのデータが壊れています。");
+        }
+        return record;
     });

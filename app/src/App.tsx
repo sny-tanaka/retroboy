@@ -172,7 +172,10 @@ const App = () => {
     const romInputRef = useRef<HTMLInputElement>(null);
     const loadStateRef = useRef<HTMLInputElement>(null);
     const [menuOpen, setMenuOpen] = useState(false);
-    const [confirmingLoad, setConfirmingLoad] = useState(false);
+    // 開いているロードの確認。"slot" は画面の「ロード」（端末内のセーブ）、"file" はメニューの「ファイルから読み込む」
+    const [confirmingLoad, setConfirmingLoad] = useState<
+        "slot" | "file" | null
+    >(null);
 
     // メニュー・確認・ファイル選択を開いている間は一時停止し、全部閉じたら元の状態に戻す。
     // 数ではなく名前で持つので、同じものを二重に閉じても数がずれない。
@@ -228,12 +231,12 @@ const App = () => {
         release("menu");
     };
 
-    const openLoadConfirm = (): void => {
+    const openLoadConfirm = (source: "slot" | "file"): void => {
         hold("confirm");
-        setConfirmingLoad(true);
+        setConfirmingLoad(source);
     };
     const closeLoadConfirm = (): void => {
-        setConfirmingLoad(false);
+        setConfirmingLoad(null);
         release("confirm");
     };
 
@@ -305,6 +308,7 @@ const App = () => {
                 screenOverlay={
                     status.kind === "running" &&
                     !session.notice &&
+                    !session.flash &&
                     !showUpdateNotice ? null : (
                         <>
                             <ScreenMessage
@@ -313,6 +317,15 @@ const App = () => {
                                 onAddRom={openRomPicker}
                                 onOpenMenu={openMenu}
                             />
+                            {session.flash && (
+                                <div
+                                    key={session.flash.key}
+                                    className="gbc-flash"
+                                    role="status"
+                                >
+                                    {session.flash.message}
+                                </div>
+                            )}
                             {session.notice && (
                                 <div className="gbc-notice" role="alert">
                                     <span>{session.notice}</span>
@@ -347,10 +360,14 @@ const App = () => {
                 powerOn={running}
                 paused={paused}
                 gameActive={running}
-                inert={menuOpen || confirmingLoad}
+                inert={menuOpen || confirmingLoad !== null}
                 onTogglePause={togglePause}
-                onSaveState={session.saveState}
-                onLoadState={openLoadConfirm}
+                onSaveState={session.saveToSlot}
+                onLoadState={() => openLoadConfirm("slot")}
+                canLoadState={
+                    session.slot.kind === "saved" ||
+                    session.slot.kind === "unreadable"
+                }
                 onOpenMenu={openMenu}
                 onButtonDown={handleButtonDown}
                 onButtonUp={handleButtonUp}
@@ -367,19 +384,28 @@ const App = () => {
                     onReloadToUpdate={reloadToUpdate}
                     onSelectRom={selectRom}
                     onAddRom={openRomPicker}
-                    onExportState={session.saveState}
+                    onExportState={session.exportStateFile}
                     onImportState={() => {
                         // 確認を先に開いてからメニューを閉じる（その間に再開しないように）
-                        openLoadConfirm();
+                        openLoadConfirm("file");
                         closeMenu();
                     }}
                 />
             </MenuSheet>
             <LoadStateConfirm
-                open={confirmingLoad}
+                open={confirmingLoad !== null}
+                savedAt={
+                    confirmingLoad === "slot" && session.slot.kind === "saved"
+                        ? session.slot.savedAt
+                        : undefined
+                }
                 onConfirm={() => {
-                    // ファイル選択を先に開いてから確認を閉じる（その間に再開しないように）
-                    pickFile("statePicker");
+                    if (confirmingLoad === "slot") {
+                        void session.loadFromSlot();
+                    } else {
+                        // ファイル選択を先に開いてから確認を閉じる（その間に再開しないように）
+                        pickFile("statePicker");
+                    }
                     closeLoadConfirm();
                 }}
                 onCancel={closeLoadConfirm}
