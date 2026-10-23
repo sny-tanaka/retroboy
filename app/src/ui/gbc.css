@@ -1,0 +1,624 @@
+/* ゲームボーイカラー（クリアパープル）風の本体。暗い背景の上に半透明の本体を置く */
+
+.gbc-stage {
+    /* 本体の色 */
+    --gbc-shell-top: rgba(190, 165, 235, 0.5);
+    --gbc-shell-bottom: rgba(135, 105, 200, 0.42);
+    --gbc-shell-edge: rgba(225, 210, 255, 0.45);
+    --gbc-shell-shadow: rgba(80, 50, 140, 0.55);
+    --gbc-detail: rgba(120, 85, 200, 0.55);
+    --gbc-label: rgba(235, 225, 255, 0.72);
+    --gbc-bezel: #2b2a31;
+    --gbc-key: #26252b;
+    --gbc-key-light: #43414b;
+    --gbc-key-text: #6f6c7a;
+    --gbc-page: #0e0d12;
+
+    position: fixed;
+    inset: 0;
+    display: flex;
+    padding: max(6px, env(safe-area-inset-top))
+        max(6px, env(safe-area-inset-right))
+        max(6px, env(safe-area-inset-bottom))
+        max(6px, env(safe-area-inset-left));
+    background:
+        radial-gradient(
+            120% 70% at 50% 30%,
+            rgba(110, 80, 170, 0.18),
+            transparent 70%
+        ),
+        var(--gbc-page);
+    color: var(--gbc-label);
+    font-family:
+        -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Helvetica Neue",
+        sans-serif;
+
+    /* iOS のタッチの既定の動き（スクロール・拡大・長押しメニュー・選択・タップの色）を止める */
+    touch-action: none;
+    overscroll-behavior: none;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.gbc-stage *,
+.gbc-stage *::before,
+.gbc-stage *::after {
+    box-sizing: border-box;
+}
+
+.gbc-body {
+    position: relative;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: var(--gbc-body-gap);
+    min-height: 0;
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 10px 10px 12px;
+    border-radius: 22px 22px 56px 56px / 22px 22px 44px 44px;
+    background:
+        linear-gradient(
+            100deg,
+            rgba(255, 255, 255, 0.16) 0%,
+            rgba(255, 255, 255, 0) 18%,
+            rgba(255, 255, 255, 0) 82%,
+            rgba(255, 255, 255, 0.08) 100%
+        ),
+        linear-gradient(180deg, var(--gbc-shell-top), var(--gbc-shell-bottom));
+    border: 1px solid var(--gbc-shell-edge);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.35),
+        inset 0 0 18px rgba(255, 255, 255, 0.08),
+        inset 0 -10px 24px var(--gbc-shell-shadow),
+        0 12px 40px rgba(0, 0, 0, 0.55);
+    -webkit-backdrop-filter: blur(2px);
+    backdrop-filter: blur(2px);
+    container-type: inline-size;
+    width: 100%;
+}
+
+/* 透けて見える中のねじ */
+.gbc-screw {
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: radial-gradient(
+        circle,
+        rgba(255, 255, 255, 0.2) 0 2px,
+        var(--gbc-detail) 3px 5px,
+        transparent 6px
+    );
+    pointer-events: none;
+}
+.gbc-screw-1 {
+    left: 10px;
+    bottom: 30%;
+}
+.gbc-screw-2 {
+    right: 10px;
+    bottom: 30%;
+}
+.gbc-screw-3 {
+    left: 46%;
+    bottom: 34%;
+}
+.gbc-screw-4 {
+    left: 30%;
+    bottom: 10%;
+}
+
+/* ---- 画面枠 ---- */
+
+.gbc-bezel {
+    position: relative;
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: var(--gbc-bezel-pad-top) var(--gbc-bezel-pad-x) 0;
+    border-radius: 12px 12px 30px 30px / 12px 12px 18px 18px;
+    background: linear-gradient(180deg, #34333b, var(--gbc-bezel));
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.08),
+        0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+.gbc-power {
+    position: absolute;
+    top: 4px;
+    left: 14px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 8px;
+    letter-spacing: 0.12em;
+    color: #8a8796;
+}
+.gbc-power-lamp {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #3d2a2e;
+    box-shadow: inset 0 0 1px rgba(0, 0, 0, 0.6);
+}
+.gbc-power[data-on] .gbc-power-lamp {
+    background: #ff4d5e;
+    box-shadow:
+        0 0 4px #ff4d5e,
+        0 0 10px rgba(255, 77, 94, 0.6);
+}
+
+.gbc-screen {
+    position: relative;
+    flex: none;
+    background: #000;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6);
+}
+.gbc-screen > canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    image-rendering: pixelated;
+}
+.gbc-screen-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #f0ecff;
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+}
+.gbc-paused {
+    background: rgba(10, 8, 18, 0.55);
+}
+
+.gbc-strip {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    width: 100%;
+    height: var(--gbc-strip-height);
+}
+.gbc-strip-spacer {
+    flex: 1;
+}
+
+.gbc-sub-button {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    min-width: 44px;
+    height: 44px;
+    padding: 0 9px;
+    border: 0;
+    border-radius: 22px;
+    white-space: nowrap;
+    background: transparent;
+    color: #a9a5b8;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    touch-action: manipulation;
+}
+.gbc-sub-button:active {
+    background: rgba(255, 255, 255, 0.1);
+    color: #ece8f8;
+}
+.gbc-state-button {
+    background: rgba(160, 130, 230, 0.16);
+    color: #d6ccf5;
+}
+.gbc-state-button:active {
+    background: rgba(170, 140, 240, 0.34);
+}
+.gbc-sub-button svg {
+    width: 18px;
+    height: 18px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+.gbc-sub-button svg .gbc-icon-fill {
+    fill: currentColor;
+    stroke: none;
+}
+
+/* ---- 操作部 ---- */
+
+.gbc-controls {
+    position: relative;
+    flex: 1;
+    min-height: var(--gbc-controls-min-height);
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr auto;
+}
+
+.gbc-ab-area {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.gbc-ab-area {
+    padding-bottom: 12px;
+}
+.gbc-puni-area {
+    position: relative;
+    min-width: 0;
+}
+.gbc-start-select-area {
+    grid-column: 1 / 3;
+    display: flex;
+    justify-content: center;
+    padding: 0 0 14px;
+}
+
+/* 透けて見える中の基板（実物の左下の緑の基板のつもり。ごく薄く） */
+.gbc-controls::before {
+    content: "";
+    position: absolute;
+    left: 3%;
+    bottom: 22%;
+    width: 19%;
+    height: 15%;
+    border-radius: 6px;
+    background:
+        repeating-linear-gradient(
+            90deg,
+            rgba(160, 220, 180, 0.07) 0 2px,
+            transparent 2px 9px
+        ),
+        rgba(60, 120, 90, 0.16);
+    box-shadow: inset 0 0 0 1px rgba(150, 210, 170, 0.1);
+    pointer-events: none;
+}
+
+/* 実物のロゴの位置に、アプリ名を浮き彫り風に入れる */
+.gbc-engraving {
+    position: absolute;
+    top: 6px;
+    left: 0;
+    right: 0;
+    text-align: center;
+    font-family: "Futura", "Avenir Next", sans-serif;
+    font-size: 13px;
+    font-style: italic;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    color: rgba(255, 255, 255, 0.14);
+    text-shadow: 0 -1px 0 rgba(40, 20, 80, 0.35);
+    pointer-events: none;
+}
+
+/* ぷにコン: 左側の領域のどこを触っても、触った所が中心になる */
+.gbc-puni {
+    --puni-radius: 44px; /* PuniPad.tsx の MAX_RADIUS と同じ */
+    position: relative;
+    width: 100%;
+    height: 100%;
+    touch-action: none;
+}
+
+/* 触っていないときの目印 */
+.gbc-puni-hint {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 116px;
+    height: 116px;
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    border: 2px dashed rgba(235, 225, 255, 0.2);
+    background: radial-gradient(
+        circle,
+        rgba(120, 85, 200, 0.22),
+        transparent 70%
+    );
+    transition: opacity 120ms;
+    pointer-events: none;
+}
+.gbc-puni[data-puni-pointer] .gbc-puni-hint {
+    opacity: 0;
+}
+.gbc-puni-hint::after {
+    /* 真ん中の小さな丸 */
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 20px;
+    height: 20px;
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    background: rgba(235, 225, 255, 0.16);
+}
+
+/* 上下左右の三角（目印と、触っているときの中心の両方で使う） */
+.gbc-puni-arrow {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 0;
+    height: 0;
+    border: 7px solid transparent;
+    --arrow: rgba(235, 225, 255, 0.28);
+    --gap: 40px;
+}
+.gbc-puni-up {
+    border-bottom: 9px solid var(--arrow);
+    transform: translate(-50%, calc(-50% - var(--gap)));
+}
+.gbc-puni-down {
+    border-top: 9px solid var(--arrow);
+    transform: translate(-50%, calc(-50% + var(--gap)));
+}
+.gbc-puni-left {
+    border-right: 9px solid var(--arrow);
+    transform: translate(calc(-50% - var(--gap)), -50%);
+}
+.gbc-puni-right {
+    border-left: 9px solid var(--arrow);
+    transform: translate(calc(-50% + var(--gap)), -50%);
+}
+
+/* 触っている間: 中心（くぼみ）・伸び・指の丸 */
+.gbc-puni-base,
+.gbc-puni-stretch,
+.gbc-puni-knob {
+    position: absolute;
+    display: none;
+    pointer-events: none;
+}
+.gbc-puni[data-puni-pointer] .gbc-puni-base,
+.gbc-puni[data-puni-pointer] .gbc-puni-stretch,
+.gbc-puni[data-puni-pointer] .gbc-puni-knob {
+    display: block;
+}
+.gbc-puni-base {
+    left: var(--puni-ox);
+    top: var(--puni-oy);
+    width: calc(var(--puni-radius) * 2 + 28px);
+    height: calc(var(--puni-radius) * 2 + 28px);
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    background: radial-gradient(
+        circle,
+        rgba(40, 25, 75, 0.45),
+        rgba(60, 40, 110, 0.3) 70%
+    );
+    box-shadow:
+        inset 0 2px 8px rgba(15, 8, 35, 0.5),
+        0 0 0 2px rgba(225, 210, 255, 0.25);
+}
+.gbc-puni-base .gbc-puni-arrow {
+    --gap: 50px;
+}
+.gbc-puni-base .gbc-puni-arrow[data-pressed] {
+    --arrow: #e4d8ff;
+    filter: drop-shadow(0 0 4px rgba(200, 170, 255, 0.95));
+}
+.gbc-puni-stretch {
+    left: var(--puni-ox);
+    top: calc(var(--puni-oy) - 17px);
+    width: var(--puni-dist);
+    height: 34px;
+    transform-origin: 0 50%;
+    transform: rotate(var(--puni-angle));
+    border-radius: 17px;
+    background: rgba(200, 180, 250, 0.35);
+}
+.gbc-puni-knob {
+    left: calc(var(--puni-ox) + var(--puni-dx));
+    top: calc(var(--puni-oy) + var(--puni-dy));
+    width: 58px;
+    height: 58px;
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    background: radial-gradient(
+        circle at 36% 30%,
+        rgba(255, 255, 255, 0.75),
+        rgba(205, 185, 255, 0.92) 32%,
+        rgba(140, 105, 220, 0.95) 100%
+    );
+    box-shadow:
+        0 6px 14px rgba(10, 5, 25, 0.5),
+        inset 0 -4px 8px rgba(80, 50, 160, 0.45);
+}
+
+/* A / B: 実物のように右上がりに並べる */
+.gbc-ab {
+    --size: clamp(58px, 17.5cqw, 76px);
+    position: relative;
+    width: calc(var(--size) * 2.75);
+    height: calc(var(--size) * 2.2);
+    touch-action: none;
+}
+.gbc-round-button {
+    position: absolute;
+    width: var(--size);
+    height: var(--size);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: radial-gradient(
+        circle at 38% 30%,
+        var(--gbc-key-light),
+        var(--gbc-key) 62%
+    );
+    box-shadow:
+        0 0 0 calc(var(--size) * 0.09) var(--gbc-detail),
+        0 4px 3px rgba(0, 0, 0, 0.5),
+        inset 0 -2px 3px rgba(0, 0, 0, 0.4);
+    color: var(--gbc-key-text);
+    font-size: calc(var(--size) * 0.36);
+    font-family: "Futura", "Avenir Next", sans-serif;
+    font-weight: 500;
+    transition:
+        transform 40ms,
+        box-shadow 40ms;
+}
+.gbc-b {
+    left: calc(var(--size) * 0.2);
+    bottom: calc(var(--size) * 0.3);
+}
+.gbc-a {
+    right: calc(var(--size) * 0.2);
+    top: calc(var(--size) * 0.3);
+}
+.gbc-round-button[data-pressed] {
+    transform: translateY(2px) scale(0.96);
+    background: radial-gradient(circle at 40% 35%, #222127, #141317 70%);
+    color: #c9b8ff;
+    box-shadow:
+        0 0 0 calc(var(--size) * 0.09) var(--gbc-detail),
+        0 1px 1px rgba(0, 0, 0, 0.5),
+        inset 0 2px 4px rgba(0, 0, 0, 0.6);
+}
+
+/* SELECT / START: 細いボタンを水平に並べる。押せる範囲は .gbc-pill-slot（見た目より広い） */
+.gbc-start-select {
+    display: flex;
+    gap: 10px;
+    touch-action: none;
+}
+.gbc-pill-slot {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    width: 72px;
+    padding: 12px 0 4px;
+}
+.gbc-pill {
+    width: 46px;
+    height: 13px;
+    border-radius: 7px;
+    background: linear-gradient(180deg, var(--gbc-key-light), var(--gbc-key));
+    box-shadow:
+        0 0 0 5px var(--gbc-detail),
+        0 2px 2px rgba(0, 0, 0, 0.5);
+}
+.gbc-pill[data-pressed] {
+    transform: translateY(1px);
+    background: #141317;
+    box-shadow:
+        0 0 0 5px var(--gbc-detail),
+        0 0 6px rgba(200, 170, 255, 0.8);
+}
+.gbc-pill-label {
+    font-size: 9px;
+    letter-spacing: 0.1em;
+    color: var(--gbc-label);
+}
+
+/* ---- メニュー ---- */
+
+.gbc-sheet-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 10;
+    display: flex;
+    align-items: flex-end;
+    background: rgba(5, 4, 10, 0.6);
+}
+.gbc-sheet {
+    width: 100%;
+    max-height: 75%;
+    display: flex;
+    flex-direction: column;
+    padding: 0 16px max(16px, env(safe-area-inset-bottom));
+    border-radius: 18px 18px 0 0;
+    background: #1d1b24;
+    border-top: 1px solid rgba(190, 165, 235, 0.35);
+    color: #e6e1f5;
+}
+.gbc-sheet-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 52px;
+    font-weight: 600;
+}
+.gbc-sheet-close {
+    height: 44px;
+    padding: 0 12px;
+    border: 0;
+    background: transparent;
+    color: #c4b5fd;
+    font: inherit;
+}
+.gbc-sheet-body {
+    overflow-y: auto;
+    touch-action: pan-y;
+    min-height: 120px;
+}
+
+/* ---- 確認 ---- */
+
+.gbc-dialog-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: rgba(5, 4, 10, 0.65);
+}
+.gbc-dialog {
+    width: 100%;
+    max-width: 320px;
+    padding: 20px 18px 14px;
+    border-radius: 16px;
+    background: #1d1b24;
+    border: 1px solid rgba(190, 165, 235, 0.35);
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
+    color: #e6e1f5;
+}
+.gbc-dialog-title {
+    margin: 0 0 8px;
+    font-size: 17px;
+    font-weight: 700;
+}
+.gbc-dialog-message {
+    margin: 0 0 18px;
+    font-size: 14px;
+    line-height: 1.6;
+    color: #b7b0cc;
+}
+.gbc-dialog-actions {
+    display: flex;
+    gap: 10px;
+}
+.gbc-dialog-button {
+    flex: 1;
+    height: 46px;
+    border: 0;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.08);
+    color: #d6d0e8;
+    font: inherit;
+    font-size: 15px;
+    font-weight: 600;
+    touch-action: manipulation;
+}
+.gbc-dialog-button:active {
+    background: rgba(255, 255, 255, 0.16);
+}
+.gbc-dialog-confirm {
+    background: #7c5cd6;
+    color: #fff;
+}
+.gbc-dialog-confirm:active {
+    background: #6a4bc2;
+}
