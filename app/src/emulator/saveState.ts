@@ -3,11 +3,13 @@
 //   (commit edf90d9fb192372a657a18d44f5c9841805fa554)
 // Copyright smparsons. Licensed under the Apache License, Version 2.0.
 // 変更点: React コンポーネントから切り出し、エラーは戻り値で返すようにした。
-//   blob URL の解放を 1 秒遅らせた（iOS Safari 対策）。
+//   blob URL の解放を 1 秒遅らせた（iOS Safari 対策）。6 バイト未満のファイルはコアに渡さない（panic するため）。
 //   セーブステートは本家と同じく .rbs ファイルとしてダウンロード／ファイルから読み込む（端末内に保存はしない）。
 import { applySaveState, encodeSaveState } from "../core/retroboyCore";
 
 const REVOKE_DELAY = 1000;
+// vendor/retroboy/src/emulator/save_state.rs の "HEADER" の長さ
+const MIN_SAVE_STATE_LENGTH = 6;
 
 export interface FileBufferObject {
     filename: string;
@@ -57,6 +59,10 @@ export const downloadSaveState = (romFilename: string): string | null => {
 export const loadSaveStateFile = async (file: File): Promise<string | null> => {
     try {
         const bufferObject = await buildFileBufferObject(file);
+        // コアは長さを確かめる前に先頭 6 バイト（"HEADER"）を切り出すので、短いと panic して WASM が使えなくなる
+        if (bufferObject.data.length < MIN_SAVE_STATE_LENGTH) {
+            return "セーブステートのファイルではないようです。";
+        }
         return applySaveState(bufferObject.data) ?? null;
     } catch (err) {
         console.error("Error loading save state:", err);

@@ -4,10 +4,30 @@
 
 - `vendor/retroboy/` … 本家 Retro Boy の git submodule（コミット固定・変更しない）。Rust のコアを WASM にビルドして使う。
 - `app/` … Vite + React + TypeScript のアプリ。本家 `frontends/web` から移したつなぎのコードは `app/src/emulator/`。
+  - `app/src/storage/` … ROM を端末内（IndexedDB）に保存する処理と、保存領域の永続化（`navigator.storage.persist()`）。
+  - `app/src/session/useRomSession.ts` … 画面の状態とロジック（ROM の追加・自動読み込み・起動・停止）。`App.tsx` は見た目だけ。
 - `scripts/build-wasm.sh` … コアを WASM にビルドして `app/src/core/` に出力する（生成物は git に入れない）。
-- `docs/upstream-notes.md` … 本家のセーブ RAM・セーブステート・WASM API の調査メモ。
+- `docs/upstream-notes.md` … 本家のセーブ RAM・セーブステート・WASM API の調査メモと、このアプリでの変更点。
+- `docs/future-work.md` … 今後の課題（ゲーム内セーブのバックアップなど）。
 
 ROM ファイルはリポジトリにもビルド成果物にも入れない。
+
+## 使い方
+
+1. 初回は「ROM を追加」で ROM ファイル（`.gb` / `.gbc`）を選ぶ。ROM は端末内（IndexedDB）に保存され、そのまま始まる。
+2. 次からは開くと前回の ROM が読み込まれるので、「タップして開始」を押す（iPhone は音を鳴らすのにタップが要るため）。
+3. ほかの ROM は「止める」を押してから、「保存した ROM」の一覧で選ぶか「ROM を追加」で足す。
+
+端末に保存されるもの（外へは送らない）:
+
+| もの | 場所 |
+|---|---|
+| ROM 本体と名前（ID は中身の SHA-256）、前回の ROM | IndexedDB `retroboy-snap` |
+| ゲーム内セーブ（セーブ RAM・RTC）。ROM ごとに分かれる | localStorage `sram:<ROM の ID>` / `rtc:<ROM の ID>` |
+
+ゲーム内セーブは最後の書き込みから 2 秒後（書き込みが続いても 10 秒以内）にまとめて書き、画面を離れるとき（ホームに戻す・閉じる）にはすぐ書く。サイトデータの削除などで消えるので、バックアップは今後の課題（`docs/future-work.md`）。
+
+ROM の ID の計算（`crypto.subtle`）は HTTPS か `localhost` でしか動かない。iPhone から開発サーバーに `http://<PC の IP>` でつなぐと ROM を追加できない。
 
 ## 必要なツール
 
