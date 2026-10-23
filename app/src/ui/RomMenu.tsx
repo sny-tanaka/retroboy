@@ -10,6 +10,11 @@ interface RomMenuProps {
     /** ゲームが動いていて、セーブステートを使える */
     readonly gameActive: boolean;
     readonly storageStatus: StorageStatus | null;
+    /** このアプリの版（ビルドした日時とコミット）。メニューの一番下に出す */
+    readonly appVersion: string;
+    /** 新しい版が届いていて、読み込み直せば切り替わる */
+    readonly updateReady: boolean;
+    readonly onReloadToUpdate: () => void;
     readonly onSelectRom: (id: string) => void;
     readonly onAddRom: () => void;
     readonly onExportState: () => void;
@@ -26,13 +31,16 @@ const formatStorage = ({ persisted, usageMB, quotaMB }: StorageStatus) => ({
     usage: `${usageMB ?? "?"} MB / ${quotaMB ?? "?"} MB`,
 });
 
-/** メニューの中身: ROM の一覧と追加、セーブステートのファイル、保存の状態 */
+/** メニューの中身: ROM の一覧と追加、セーブステートのファイル、保存の状態、アプリの版 */
 export const RomMenu = ({
     roms,
     currentRomId,
     busy,
     gameActive,
     storageStatus,
+    appVersion,
+    updateReady,
+    onReloadToUpdate,
     onSelectRom,
     onAddRom,
     onExportState,
@@ -123,6 +131,27 @@ export const RomMenu = ({
                 <p className="gbc-menu-note">
                     キーボード: 方向 = 矢印キー / A = Z / B = X / START = Enter
                     / SELECT = Space
+                </p>
+            </section>
+
+            <section className="gbc-menu-section">
+                <h2 className="gbc-menu-heading">このアプリ</h2>
+                {updateReady && (
+                    <>
+                        <button
+                            type="button"
+                            className="gbc-menu-item gbc-menu-add"
+                            onClick={onReloadToUpdate}
+                        >
+                            新しい版に切り替える（再読み込み）
+                        </button>
+                        <p className="gbc-menu-note">
+                            ゲーム内セーブを書き出してから読み込み直します。セーブしていない進みは失われます。
+                        </p>
+                    </>
+                )}
+                <p className="gbc-menu-note gbc-menu-version">
+                    バージョン: {appVersion}
                 </p>
             </section>
         </>

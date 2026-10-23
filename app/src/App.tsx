@@ -7,10 +7,22 @@
 //   開始・読み込み中・エラーはダイアログではなくゲーム画面の中に出す。セーブステートの処理は
 //   emulator/saveState.ts に、状態とロジック（ROM の保存・自動読み込み・起動）は session/useRomSession.ts に切り出した。
 //   モードの選択は外し、ROM ヘッダの CGB フラグか拡張子 .gbc で決めるようにした。
-import { type RefObject, useEffect, useRef, useState } from "react";
+import {
+    type RefObject,
+    useEffect,
+    useRef,
+    useState,
+    useSyncExternalStore,
+} from "react";
 
 import { pressKey, releaseKey } from "./core/retroboyCore";
+import { flushPendingSaves } from "./emulator/cartridgeEffects";
 import GameScreen from "./emulator/GameScreen";
+import {
+    APP_VERSION,
+    isUpdateReady,
+    onUpdateReady,
+} from "./pwa/registerServiceWorker";
 import useRomSession, { type SessionStatus } from "./session/useRomSession";
 import type { GbButton } from "./ui/buttons";
 import { LoadStateConfirm } from "./ui/ConfirmDialog";
@@ -136,8 +148,18 @@ const useFilePickerClose = (
     }, []);
 };
 
+// 新しい版に切り替える。待っているゲーム内セーブを先に書き出してから読み込み直す
+const reloadToUpdate = (): void => {
+    flushPendingSaves();
+    location.reload();
+};
+
 const App = () => {
     const session = useRomSession();
+    // 新しい版の Service Worker が入った。勝手には読み込み直さず、知らせて押してもらう
+    const updateReady = useSyncExternalStore(onUpdateReady, isUpdateReady);
+    const [updateDismissed, setUpdateDismissed] = useState(false);
+    const showUpdateNotice = updateReady && !updateDismissed;
     const { status, playing, paused, roms } = session;
     const running = status.kind === "running";
     const busy = status.kind === "booting" || status.kind === "loading";
@@ -281,7 +303,9 @@ const App = () => {
                     />
                 }
                 screenOverlay={
-                    status.kind === "running" && !session.notice ? null : (
+                    status.kind === "running" &&
+                    !session.notice &&
+                    !showUpdateNotice ? null : (
                         <>
                             <ScreenMessage
                                 status={status}
@@ -297,6 +321,23 @@ const App = () => {
                                         onClick={session.dismissNotice}
                                     >
                                         閉じる
+                                    </button>
+                                </div>
+                            )}
+                            {showUpdateNotice && (
+                                <div className="gbc-notice gbc-update-notice">
+                                    <span>新しい版があります</span>
+                                    <button
+                                        type="button"
+                                        onClick={reloadToUpdate}
+                                    >
+                                        再読み込み
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setUpdateDismissed(true)}
+                                    >
+                                        あとで
                                     </button>
                                 </div>
                             )}
@@ -321,6 +362,9 @@ const App = () => {
                     busy={busy}
                     gameActive={running}
                     storageStatus={session.storageStatus}
+                    appVersion={APP_VERSION}
+                    updateReady={updateReady}
+                    onReloadToUpdate={reloadToUpdate}
                     onSelectRom={selectRom}
                     onAddRom={openRomPicker}
                     onExportState={session.saveState}

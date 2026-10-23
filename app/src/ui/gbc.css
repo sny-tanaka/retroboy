@@ -771,6 +771,18 @@
     font: inherit;
     font-size: 12px;
 }
+/* 新しい版のお知らせ。保存の失敗の知らせ（上）と重ならないよう画面の下に、急ぎではないので暗い紫で出す */
+.gbc-update-notice {
+    top: auto;
+    bottom: 6px;
+    gap: 6px;
+    background: rgba(29, 27, 36, 0.92);
+    box-shadow: inset 0 0 0 1px rgba(190, 165, 235, 0.35);
+    color: #e6e1f5;
+}
+.gbc-update-notice button:first-of-type {
+    background: #7c5cd6;
+}
 
 /* ---- メニューの中身 ---- */
 

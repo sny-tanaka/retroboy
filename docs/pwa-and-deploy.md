@@ -17,7 +17,8 @@
 | `app/index.html` | manifest・apple-touch-icon・iOS 用のメタ（ステータスバー・タイトル）・noindex |
 | `app/sw/sw.template.js` | Service Worker の本体（このままでは配信しない） |
 | `app/scripts/generate-sw.mjs` | `vite build` のあとに走り、`dist/` の一覧と版を付けて `dist/sw.js` を書く |
-| `app/src/pwa/registerServiceWorker.ts` | Service Worker の登録（本番ビルドのときだけ） |
+| `app/src/pwa/registerServiceWorker.ts` | Service Worker の登録（本番ビルドのときだけ）と、新しい版が届いたことの検知 |
+| `app/vite.config.ts` | アプリの版（画面に出すもの）とビルドの印を JS に埋め込み、`dist/version.json` にも書く |
 | `netlify.toml` | 公開するフォルダ（`app/dist`）とレスポンスヘッダー |
 
 ## Service Worker
@@ -48,9 +49,26 @@
 1. `generate-sw.mjs` が `dist/` の中身のハッシュを版（`VERSION`）にして `sw.js` に書くので、中身が変われば `sw.js` も変わる。
 2. ブラウザはページを開くたび（と、ホーム画面アプリが前面に戻るたび）に `sw.js` を確かめる。`sw.js` は HTTP キャッシュを通さない（登録時の `updateViaCache: "none"` と `netlify.toml` の `Cache-Control: no-cache`）。
 3. 変わっていれば新しい Service Worker が入り、新しい版のファイルを別のキャッシュ（`retroboy-snap-<版>`）に取る。待たずに入れ替わり（`skipWaiting`）、古い版のキャッシュ（`retroboy-snap-` で始まる別の名前）を消す。
-4. 開いている画面は古い JS のまま動き続ける（途中で再読み込みはしない）。次に開いたときから新しい版になる。オンラインなら `index.html` はネットワークから取るので、たいていデプロイ直後の次の起動で新しい版になる。
+4. 開いている画面は古い JS のまま動き続ける（勝手に再読み込みはしない）。次に開いたときから新しい版になる。オンラインなら `index.html` はネットワークから取るので、たいていデプロイ直後の次の起動で新しい版になる。
+5. 開いている画面には、ゲーム画面の下に「新しい版があります」と「再読み込み」「あとで」を出す（メニューの「このアプリ」にも「新しい版に切り替える（再読み込み）」が出る）。「再読み込み」を押すと、待っているゲーム内セーブを書き出してから `location.reload()` する。
 
-ホーム画面アプリは閉じずに裏に回っているだけのことが多い。新しい版を確実に使いたいときは、アプリの切り替え画面で上にスワイプして閉じてから開き直す。
+#### 新しい版が届いたことの見分け方
+
+`app/src/pwa/registerServiceWorker.ts`。
+
+- `sw.js` は入るとすぐ入れ替わる（`skipWaiting` と `clients.claim`）ので、画面では `controllerchange`（受け持ちの Service Worker が替わった）を合図にする。
+- 入れ替わっただけでは知らせない。初めて Service Worker が入ったときや、デプロイのあとに開いた画面（ネットワークから新しい版を読み込んだのに、受け持ちはまだ古い Service Worker）でも入れ替わるため。新しい受け持ちのキャッシュにある `version.json` のビルドの印（`buildId`）を読み、画面に埋め込まれた印と違うときだけ知らせる。
+- 開いたときには確かめない（デプロイ直後は、画面は新しいのに古い Service Worker のキャッシュの `version.json` が古く、違って見えるため）。
+
+#### 版の文字列
+
+| もの | 中身 | 使い道 |
+|---|---|---|
+| アプリの版（`__APP_VERSION__`、`version.json` の `version`） | ビルドした日時（日本時間・分まで）と git の短いコミットハッシュ。コミットしていない変更（追跡していないファイルも含む）があれば `+`。例: `2026-10-24 12:34 (abc1234)` | メニューの一番下に出し、人が更新できたかを確かめる |
+| ビルドの印（`__BUILD_ID__`、`version.json` の `buildId`） | ビルドした時刻（ミリ秒まで、ISO 8601） | 新しい版が届いたかの判定（表示の版は分単位で、同じ分のビルドを見分けられないため） |
+| Service Worker の版（`sw.js` の `VERSION`） | `dist/` の中身のハッシュ | キャッシュの名前。中身が変われば新しい Service Worker が入る |
+
+ホーム画面アプリは閉じずに裏に回っているだけのことが多い。前面に戻したときに `sw.js` を確かめるので、新しい版があればお知らせが出る。出ないのに新しい版を使いたいときは、アプリの切り替え画面で上にスワイプして閉じてから開き直す。
 
 古いキャッシュがどうしても残ったときは、iPhone の「設定 > アプリ > Safari > 詳細 > Web サイトデータ」で消せるが、**ROM とゲーム内セーブも一緒に消える**ので最後の手段にする。
 
@@ -63,6 +81,8 @@ npm run preview    # http://localhost:4173
 ```
 
 開いたあと、開発者ツールの Application で manifest と Service Worker（`sw.js`、activated）とキャッシュ（`retroboy-snap-<版>`）が見える。`npm run preview` を止めてから再読み込みしても起動する。開発サーバー（`npm run dev`）では Service Worker を登録しない。
+
+更新のお知らせは、開いたまま `npm run build` をやり直し、タブを裏に回して戻す（`visibilitychange`）と出る。
 
 ## アイコン
 
