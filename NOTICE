@@ -1,0 +1,17 @@
+Retro Boy Snap
+Copyright 2026 Shunya Tanaka
+
+This product includes software developed as part of Retro Boy
+(https://github.com/smparsons/retroboy), licensed under the Apache License,
+Version 2.0. Copyright smparsons.
+
+- vendor/retroboy/ は Retro Boy 本家の git submodule で、
+  コミット edf90d9fb192372a657a18d44f5c9841805fa554 に固定している。
+  本家のコードは変更していない。ビルドした WASM（app/src/core/ に生成）を配信物に含む。
+- app/src/emulator/ のつなぎのコードは Retro Boy の frontends/web から移したもので、
+  各ファイルの先頭に出どころ（本家のパスとコミット）と変更点を記している。
+
+Retro Boy のコアには次のブート ROM が含まれる（vendor/retroboy/src/bios.rs）。
+ライセンスはそれぞれのリポジトリを参照。
+- DMG: Bootix (https://github.com/Hacktix/Bootix)
+- CGB: SameBoy の CGB ブート ROM を本家がカスタマイズしたもの (https://github.com/LIJI32/SameBoy)

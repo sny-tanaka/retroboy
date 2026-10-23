@@ -1,0 +1,4 @@
+node_modules
+dist
+# scripts/build-wasm.sh が生成する WASM とつなぎの JS
+src/core
