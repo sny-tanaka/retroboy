@@ -67,7 +67,7 @@ const detectMode = (rom: RomRecord): GameBoyMode => {
 };
 
 // コアはヘッダの RAM サイズ（0x149）が 0〜5 以外だとエラーを返さず panic し、WASM が使えなくなる。
-// その前にここで弾く（vendor/retroboy/src/address_bus/cartridge.rs の set_ram_size）
+// その前にここで弾く（本家 smparsons/retroboy の src/address_bus/cartridge.rs の set_ram_size）
 const hasValidRamSize = (rom: RomRecord): boolean =>
     (new Uint8Array(rom.data)[0x149] ?? 0xff) <= 0x05;
 

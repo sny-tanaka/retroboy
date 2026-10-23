@@ -8,7 +8,7 @@
 import { applySaveState, encodeSaveState } from "../core/retroboyCore";
 
 const REVOKE_DELAY = 1000;
-// vendor/retroboy/src/emulator/save_state.rs の "HEADER" の長さ
+// 本家 smparsons/retroboy の src/emulator/save_state.rs の "HEADER" の長さ
 const MIN_SAVE_STATE_LENGTH = 6;
 
 export interface FileBufferObject {

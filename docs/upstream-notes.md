@@ -2,8 +2,8 @@
 
 ② (ROM の IndexedDB 保存と自動読み込み) と ③ (UI の作り直し) の作業者向け。本家の仕組みと、このアプリでどう変えたか（「このアプリでは」の段落）を書く。
 
-- 対象: [smparsons/retroboy](https://github.com/smparsons/retroboy) コミット `edf90d9fb192372a657a18d44f5c9841805fa554`（2026-03-01、`vendor/retroboy` に submodule で固定）
-- 以下のパスは特に断りがなければ `vendor/retroboy/` からの相対パス。
+- 対象: [smparsons/retroboy](https://github.com/smparsons/retroboy) コミット `edf90d9fb192372a657a18d44f5c9841805fa554`（2026-03-01、`core/Cargo.toml` の Cargo の git 参照 `rev` と `core/Cargo.lock` で固定）
+- 以下のパスは特に断りがなければ本家リポジトリのルートからの相対パス。本家のソースは [GitHub の該当コミット](https://github.com/smparsons/retroboy/tree/edf90d9fb192372a657a18d44f5c9841805fa554) か、ビルド後の Cargo のチェックアウト先（`~/.cargo/git/checkouts/retroboy-<ハッシュ>/edf90d9/`）で読める。
 
 ## 全体の構成
 

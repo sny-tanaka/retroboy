@@ -3,3 +3,6 @@
 *.gb
 *.gbc
 *.rbs
+
+# Rust のビルド生成物（scripts/build-wasm.sh）
+target/

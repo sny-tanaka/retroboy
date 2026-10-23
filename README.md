@@ -2,7 +2,7 @@
 
 [Retro Boy](https://github.com/smparsons/retroboy) のエミュレーターコアを使った、iPhone のホーム画面で遊ぶための個人用 Game Boy エミュレーター。
 
-- `vendor/retroboy/` … 本家 Retro Boy の git submodule（コミット固定・変更しない）。Rust のコアを WASM にビルドして使う。
+- `core/` … 本家 Retro Boy のコアを Cargo の git 参照（コミット固定・変更しない）で取り込むだけの Rust クレート。これを WASM にビルドして使う。版は `core/Cargo.toml` の `rev` と `core/Cargo.lock` で固定する。
 - `app/` … Vite + React + TypeScript のアプリ。本家 `frontends/web` から移したつなぎのコードは `app/src/emulator/`。
   - `app/src/storage/` … ROM を端末内（IndexedDB）に保存する処理と、保存領域の永続化（`navigator.storage.persist()`）。
   - `app/src/session/useRomSession.ts` … 画面の状態とロジック（ROM の追加・自動読み込み・起動・停止）。`App.tsx` は見た目だけ。
@@ -49,13 +49,11 @@ Homebrew の `rust` が入っていても消す必要はない（`rust` には w
 ## 開発手順
 
 ```sh
-# 1. submodule の取得（clone 時なら git clone --recurse-submodules でもよい）
-git submodule update --init
-
-# 2. コアを WASM にビルド（app/src/core/ に出力。コアを更新したら再実行）
+# 1. コアを WASM にビルド（app/src/core/ に出力。本家の版を変えたら再実行）
+#    初回は Cargo が本家のソースを GitHub から取ってくる
 ./scripts/build-wasm.sh
 
-# 3. アプリの依存を入れて起動
+# 2. アプリの依存を入れて起動
 cd app
 npm ci
 npm run dev        # http://localhost:5173
@@ -85,16 +83,22 @@ WASM のビルド → 型チェック → lint → 本番ビルドを順に実�
 
 操作: 十字キー = 矢印キー / A = Z / B = X / START = Enter / SELECT = Space
 
+## 本家のコードを読む
+
+本家のソースはリポジトリに入れていない。読むときは次のどちらか:
+
+- GitHub の固定したコミット: https://github.com/smparsons/retroboy/tree/edf90d9fb192372a657a18d44f5c9841805fa554
+- 一度ビルドしたあとの Cargo のチェックアウト先: `~/.cargo/git/checkouts/retroboy-<ハッシュ>/edf90d9/`（`CARGO_HOME` を変えていればその下）
+
 ## 本家の版を上げるとき
 
 ```sh
-cd vendor/retroboy
-git fetch && git checkout <新しいコミット>
-cd ../..
-git add vendor/retroboy
+# core/Cargo.toml の rev を新しいコミットのフルハッシュに書き換えてから
+cargo update --manifest-path core/Cargo.toml -p retroboy
+./scripts/build-wasm.sh
 ```
 
-あわせて、移したファイルの先頭と `NOTICE` に書いたコミットを更新し、`docs/upstream-notes.md` の内容が変わっていないか確かめる（特にセーブステートの版が上がると、古いセーブステートは読めなくなる）。
+`core/Cargo.toml` と `core/Cargo.lock` を一緒にコミットする（`scripts/build-wasm.sh` は `--locked` でビルドするので、`Cargo.lock` を更新し忘れると失敗する）。あわせて、移したファイルの先頭と `NOTICE` に書いたコミットを更新し、`docs/upstream-notes.md` の内容が変わっていないか確かめる（特にセーブステートの版が上がると、古いセーブステートは読めなくなる）。
 
 ## ライセンス
 

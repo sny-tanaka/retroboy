@@ -5,13 +5,13 @@ This product includes software developed as part of Retro Boy
 (https://github.com/smparsons/retroboy), licensed under the Apache License,
 Version 2.0. Copyright smparsons.
 
-- vendor/retroboy/ は Retro Boy 本家の git submodule で、
+- Retro Boy 本家のコアは core/Cargo.toml から Cargo の git 参照で取り込み、
   コミット edf90d9fb192372a657a18d44f5c9841805fa554 に固定している。
-  本家のコードは変更していない。ビルドした WASM（app/src/core/ に生成）を配信物に含む。
+  本家のコードはリポジトリに含めず、変更もしていない。ビルドした WASM（app/src/core/ に生成）を配信物に含む。
 - app/src/emulator/ のつなぎのコードは Retro Boy の frontends/web から移したもので、
   各ファイルの先頭に出どころ（本家のパスとコミット）と変更点を記している。
 
-Retro Boy のコアには次のブート ROM が含まれる（vendor/retroboy/src/bios.rs）。
+Retro Boy のコアには次のブート ROM が含まれる（本家の src/bios.rs）。
 ライセンスはそれぞれのリポジトリを参照。
 - DMG: Bootix (https://github.com/Hacktix/Bootix)
 - CGB: SameBoy の CGB ブート ROM を本家がカスタマイズしたもの (https://github.com/LIJI32/SameBoy)

@@ -1,0 +1,15 @@
+# 本家 Retro Boy のコアを WASM にするためだけのクレート。自前のコードは持たない。
+# 本家の #[wasm_bindgen] の関数（本家 src/wasm/api.rs）が、そのままこの cdylib から export される。
+# 本家の版は rev で固定する。上げるときは rev と Cargo.lock を一緒に更新する（README）。
+[package]
+name = "retroboy-snap-core"
+license = "Apache-2.0"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+retroboy = { git = "https://github.com/smparsons/retroboy", rev = "edf90d9fb192372a657a18d44f5c9841805fa554" }

@@ -1,4 +1,4 @@
-// WASM コア（vendor/retroboy/src/wasm/api.rs の extern "C" ブロック）が呼び出す window 上の関数。
+// WASM コア（本家 smparsons/retroboy の src/wasm/api.rs の extern "C" ブロック）が呼び出す window 上の関数。
 // 本家 frontends/web では (window as any) で代入していたものに型を付けたもの。
 import type { WasmRTCState } from "../core/retroboyCore";
 
