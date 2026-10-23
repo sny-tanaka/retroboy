@@ -2,13 +2,12 @@
 //   (commit edf90d9fb192372a657a18d44f5c9841805fa554)
 // Copyright smparsons. Licensed under the Apache License, Version 2.0.
 // 変更点: MUI の styled を外して素の canvas にし、ref を props で受け取るようにした。
+//   表示の大きさは親（ui/GbcBody の画面枠）に合わせるので、倍率（scale）と枠線は持たない。
 //   描画処理（window.canvasRender の登録と初期化時の黒塗り）は本家と同じ。
 import { type RefObject, useEffect } from "react";
 
 export const GAMEBOY_WIDTH = 160;
 export const GAMEBOY_HEIGHT = 144;
-
-const DEFAULT_SCALE = 2;
 
 const renderFrame = (
     canvasContext: CanvasRenderingContext2D,
@@ -35,7 +34,6 @@ export const GameScreen = ({
     canvasRef,
     playing,
     paused,
-    scale = DEFAULT_SCALE,
 }: GameScreenProps) => {
     useEffect(() => {
         const canvasContext = canvasRef.current?.getContext("2d");
@@ -63,9 +61,9 @@ export const GameScreen = ({
             width={GAMEBOY_WIDTH}
             height={GAMEBOY_HEIGHT}
             style={{
-                width: `${GAMEBOY_WIDTH * scale}px`,
-                height: `${GAMEBOY_HEIGHT * scale}px`,
-                border: "1px solid #888",
+                display: "block",
+                width: "100%",
+                height: "100%",
                 imageRendering: "pixelated",
             }}
         />
@@ -76,7 +74,6 @@ interface GameScreenProps {
     readonly canvasRef: RefObject<HTMLCanvasElement | null>;
     readonly playing: boolean;
     readonly paused: boolean;
-    readonly scale?: number;
 }
 
 export default GameScreen;

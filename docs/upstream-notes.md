@@ -144,6 +144,6 @@ iOS ではバックグラウンドから戻ると接続が切れていること�
 - 状態とロジック: `app/src/session/useRomSession.ts` の戻り値（`status` と操作の関数）だけで画面を作れる。`App.tsx` は見た目だけなので、まるごと差し替えてよい。`status.kind` は `booting` / `noRom` / `loading` / `ready`（タップして開始）/ `running`（`paused` あり）/ `error`（`retry` あり）。
 - 「ROM を追加」のボタンでは、ファイル選択を開く前に `unlockAudio()` を呼ぶ（保存後すぐに始められるように）。
 
-- 画面: `GameScreen.tsx` は 160×144 の canvas を `scale` 倍で表示するだけ。CSS は自由に替えてよい（`image-rendering: pixelated` は残す）。
+- 画面: `GameScreen.tsx` は 160×144 の canvas を親の大きさいっぱいに表示するだけ（`image-rendering: pixelated`）。大きさは `app/src/ui/GbcBody.tsx` の画面枠が決める（1 ドットが実際の画面の整数個のピクセルになる大きさ）。
 - 入力: `pressKey` / `releaseKey` にボタン名を渡せばよい。タッチボタンは pointerdown/pointerup でこれを呼ぶ。キーボードの割り当ては `useKeyListeners.ts` の `keyMap`。
 - 本家のタッチ用ゲームパッドは `frontends/web/src/components/gamePad.tsx`（MUI 依存）。参考程度。

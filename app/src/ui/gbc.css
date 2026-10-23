@@ -207,7 +207,10 @@
     font-weight: 600;
     touch-action: manipulation;
 }
-.gbc-sub-button:active {
+.gbc-sub-button:disabled {
+    opacity: 0.35;
+}
+.gbc-sub-button:active:not(:disabled) {
     background: rgba(255, 255, 255, 0.1);
     color: #ece8f8;
 }
@@ -215,7 +218,7 @@
     background: rgba(160, 130, 230, 0.16);
     color: #d6ccf5;
 }
-.gbc-state-button:active {
+.gbc-state-button:active:not(:disabled) {
     background: rgba(170, 140, 240, 0.34);
 }
 .gbc-sub-button svg {
@@ -529,10 +532,24 @@
     z-index: 10;
     display: flex;
     align-items: flex-end;
+    justify-content: center;
     background: rgba(5, 4, 10, 0.6);
+    font-family:
+        -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Helvetica Neue",
+        sans-serif;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+}
+.gbc-sheet-backdrop *,
+.gbc-sheet-backdrop *::before,
+.gbc-sheet-backdrop *::after {
+    box-sizing: border-box;
 }
 .gbc-sheet {
     width: 100%;
+    max-width: 480px;
     max-height: 75%;
     display: flex;
     flex-direction: column;
@@ -541,6 +558,10 @@
     background: #1d1b24;
     border-top: 1px solid rgba(190, 165, 235, 0.35);
     color: #e6e1f5;
+}
+.gbc-sheet:focus {
+    /* 開いたときにメニュー全体へフォーカスを移すので、枠は出さない（中のボタンには出る） */
+    outline: none;
 }
 .gbc-sheet-header {
     display: flex;
@@ -574,6 +595,18 @@
     justify-content: center;
     padding: 24px;
     background: rgba(5, 4, 10, 0.65);
+    font-family:
+        -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Helvetica Neue",
+        sans-serif;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+}
+.gbc-dialog-backdrop *,
+.gbc-dialog-backdrop *::before,
+.gbc-dialog-backdrop *::after {
+    box-sizing: border-box;
 }
 .gbc-dialog {
     width: 100%;
@@ -621,4 +654,210 @@
 }
 .gbc-dialog-confirm:active {
     background: #6a4bc2;
+}
+
+/* ---- ゲーム画面の中の案内（開始・読み込み中・エラー・ROM 未登録・お知らせ） ---- */
+
+.gbc-overlay-panel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    max-width: 92%;
+    padding: 14px 12px;
+    border-radius: 12px;
+    background: rgba(18, 15, 28, 0.86);
+    text-align: center;
+}
+.gbc-overlay-text {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.5;
+    color: #e6e1f5;
+    text-align: center;
+}
+.gbc-overlay-error {
+    color: #ff9aa5;
+    font-weight: 500;
+    font-size: 13px;
+}
+.gbc-overlay-sub {
+    font-size: 12px;
+    font-weight: 500;
+    color: #b7b0cc;
+    overflow-wrap: anywhere;
+}
+.gbc-overlay-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+}
+.gbc-overlay-button {
+    min-height: 44px;
+    padding: 0 16px;
+    border: 0;
+    border-radius: 22px;
+    background: #7c5cd6;
+    color: #fff;
+    font: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    touch-action: manipulation;
+}
+.gbc-overlay-button:active {
+    background: #6a4bc2;
+}
+.gbc-overlay-secondary {
+    background: rgba(255, 255, 255, 0.12);
+    color: #e6e1f5;
+}
+.gbc-overlay-secondary:active {
+    background: rgba(255, 255, 255, 0.2);
+}
+.gbc-overlay-start {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 12px;
+    border: 0;
+    background: rgba(12, 10, 20, 0.55);
+    color: #f0ecff;
+    font: inherit;
+    touch-action: manipulation;
+}
+.gbc-overlay-start-label {
+    padding: 12px 22px;
+    border-radius: 26px;
+    background: #7c5cd6;
+    font-size: 17px;
+    font-weight: 700;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+}
+.gbc-overlay-start:active .gbc-overlay-start-label {
+    background: #6a4bc2;
+}
+.gbc-notice {
+    position: absolute;
+    left: 6px;
+    right: 6px;
+    top: 6px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 6px 6px 10px;
+    border-radius: 10px;
+    background: rgba(70, 20, 35, 0.92);
+    color: #ffd6dc;
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1.4;
+}
+.gbc-notice span {
+    flex: 1;
+}
+.gbc-notice button {
+    min-height: 36px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.14);
+    color: #fff;
+    font: inherit;
+    font-size: 12px;
+}
+
+/* ---- メニューの中身 ---- */
+
+.gbc-menu-section {
+    padding: 4px 0 16px;
+}
+.gbc-menu-heading {
+    margin: 0 0 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #a99fcc;
+}
+.gbc-menu-list {
+    margin: 0 0 8px;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.gbc-menu-row {
+    display: flex;
+    gap: 8px;
+}
+.gbc-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    min-height: 48px;
+    padding: 0 14px;
+    border: 0;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.06);
+    color: #e6e1f5;
+    font: inherit;
+    font-size: 15px;
+    text-align: left;
+    touch-action: manipulation;
+}
+.gbc-menu-item:active:not(:disabled) {
+    background: rgba(255, 255, 255, 0.14);
+}
+.gbc-menu-item:disabled {
+    opacity: 0.4;
+}
+.gbc-menu-item[data-current] {
+    background: rgba(124, 92, 214, 0.28);
+    box-shadow: inset 0 0 0 1px rgba(190, 165, 235, 0.45);
+}
+.gbc-menu-row .gbc-menu-item {
+    justify-content: center;
+    text-align: center;
+}
+.gbc-menu-item-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.gbc-menu-badge {
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: #7c5cd6;
+    color: #fff;
+    font-size: 11px;
+}
+.gbc-menu-add {
+    color: #c4b5fd;
+}
+.gbc-menu-note {
+    margin: 8px 0 0;
+    font-size: 12px;
+    line-height: 1.5;
+    color: #8f88a8;
+}
+.gbc-menu-facts {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 4px 12px;
+    margin: 0;
+    font-size: 13px;
+}
+.gbc-menu-facts dt {
+    color: #8f88a8;
+}
+.gbc-menu-facts dd {
+    margin: 0;
+    color: #d6d0e8;
 }

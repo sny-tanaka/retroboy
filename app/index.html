@@ -2,13 +2,20 @@
 <html lang="ja">
     <head>
         <meta charset="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <!-- viewport-fit=cover: ノッチ・ホームバーの下まで描き、safe-area-inset でよける -->
+        <meta
+            name="viewport"
+            content="width=device-width, initial-scale=1, viewport-fit=cover"
+        />
         <meta name="color-scheme" content="dark" />
         <title>Retro Boy Snap</title>
         <style>
+            html,
             body {
                 margin: 0;
-                background: #121212;
+                height: 100%;
+                overflow: hidden;
+                background: #0e0d12;
                 color: #e0e0e0;
                 color-scheme: dark;
             }

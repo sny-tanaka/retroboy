@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import type { GbButton } from "../buttons";
+import { LoadStateConfirm } from "../ConfirmDialog";
 import { GbcBody } from "../GbcBody";
 import { MenuSheet } from "../MenuSheet";
 import { GB_HEIGHT, GB_WIDTH } from "../useScreenSize";
@@ -76,6 +77,7 @@ export const Preview = () => {
     const [lastAction, setLastAction] = useState("-");
     const [paused, setPaused] = useState(false);
     const [menuOpen, setMenuOpen] = useState(false);
+    const [confirmingLoad, setConfirmingLoad] = useState(false);
 
     useEffect(() => {
         const context = canvasRef.current?.getContext("2d");
@@ -85,6 +87,7 @@ export const Preview = () => {
     return (
         <>
             <GbcBody
+                inert={menuOpen || confirmingLoad}
                 powerOn={!paused}
                 paused={paused}
                 screen={
@@ -111,7 +114,7 @@ export const Preview = () => {
                     setLastAction("PAUSE");
                 }}
                 onSaveState={() => setLastAction("SAVE STATE")}
-                onLoadState={() => setLastAction("LOAD STATE")}
+                onLoadState={() => setConfirmingLoad(true)}
                 onOpenMenu={() => {
                     setMenuOpen(true);
                     setLastAction("MENU");
@@ -122,6 +125,14 @@ export const Preview = () => {
                     ここに ROM の選択・切り替えなどが入ります。
                 </p>
             </MenuSheet>
+            <LoadStateConfirm
+                open={confirmingLoad}
+                onConfirm={() => {
+                    setConfirmingLoad(false);
+                    setLastAction("LOAD STATE");
+                }}
+                onCancel={() => setConfirmingLoad(false)}
+            />
         </>
     );
 };

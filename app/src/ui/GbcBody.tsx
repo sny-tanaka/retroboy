@@ -1,16 +1,9 @@
 import "./gbc.css";
 
-import {
-    type CSSProperties,
-    type ReactNode,
-    useEffect,
-    useRef,
-    useState,
-} from "react";
+import { type CSSProperties, type ReactNode, useEffect, useRef } from "react";
 
 import { ActionButtons } from "./ActionButtons";
 import type { GbButtonHandlers } from "./buttons";
-import { ConfirmDialog } from "./ConfirmDialog";
 import { PuniPad } from "./PuniPad";
 import { StartSelect } from "./StartSelect";
 import { useScreenSize } from "./useScreenSize";
@@ -35,11 +28,15 @@ export interface GbcBodyProps extends GbButtonHandlers {
     readonly screenOverlay?: ReactNode;
     readonly powerOn: boolean;
     readonly paused: boolean;
+    /** false のとき、一時停止・セーブ・ロードを押せなくする（ゲームが動いていないとき）。既定は true */
+    readonly gameActive?: boolean;
     readonly onTogglePause: () => void;
     readonly onSaveState: () => void;
-    /** 確認で「はい」を選んだときだけ呼ばれる */
+    /** 「ロード」を押した。上書きの確認（ConfirmDialog）は呼ぶ側で出す */
     readonly onLoadState: () => void;
     readonly onOpenMenu: () => void;
+    /** メニューや確認を開いている間は true にして、本体を操作できなくする（Tab でも届かない） */
+    readonly inert?: boolean;
 }
 
 const MenuIcon = () => (
@@ -103,6 +100,8 @@ export const GbcBody = ({
     onSaveState,
     onLoadState,
     onOpenMenu,
+    inert = false,
+    gameActive = true,
     onButtonDown,
     onButtonUp,
 }: GbcBodyProps) => {
@@ -110,7 +109,6 @@ export const GbcBody = ({
     const bodyRef = useRef<HTMLDivElement>(null);
     const screenSize = useScreenSize(bodyRef, RESERVE);
     const handlers = { onButtonDown, onButtonUp };
-    const [confirmingLoad, setConfirmingLoad] = useState(false);
 
     const style = {
         "--gbc-bezel-pad-x": `${BEZEL_PAD_X}px`,
@@ -121,7 +119,7 @@ export const GbcBody = ({
     } as CSSProperties;
 
     return (
-        <div className="gbc-stage" style={style}>
+        <div className="gbc-stage" style={style} inert={inert}>
             <div ref={bodyRef} className="gbc-body">
                 <span className="gbc-screw gbc-screw-1" />
                 <span className="gbc-screw gbc-screw-2" />
@@ -132,6 +130,7 @@ export const GbcBody = ({
                     <span
                         className="gbc-power"
                         data-on={powerOn || undefined}
+                        role="img"
                         aria-label={powerOn ? "電源オン" : "電源オフ"}
                     >
                         <span className="gbc-power-lamp" />
@@ -170,6 +169,7 @@ export const GbcBody = ({
                             className="gbc-sub-button"
                             onClick={onTogglePause}
                             aria-pressed={paused}
+                            disabled={!gameActive}
                         >
                             {paused ? <PlayIcon /> : <PauseIcon />}
                             {paused ? "再開" : "一時停止"}
@@ -179,6 +179,7 @@ export const GbcBody = ({
                             type="button"
                             className="gbc-sub-button gbc-state-button"
                             onClick={onSaveState}
+                            disabled={!gameActive}
                         >
                             <SaveIcon />
                             セーブ
@@ -186,7 +187,8 @@ export const GbcBody = ({
                         <button
                             type="button"
                             className="gbc-sub-button gbc-state-button"
-                            onClick={() => setConfirmingLoad(true)}
+                            onClick={onLoadState}
+                            disabled={!gameActive}
                         >
                             <LoadIcon />
                             ロード
@@ -209,17 +211,6 @@ export const GbcBody = ({
                     </div>
                 </section>
             </div>
-            <ConfirmDialog
-                open={confirmingLoad}
-                title="ロードしますか？"
-                message="いまの進みは、セーブした時点の状態で上書きされます。"
-                confirmLabel="ロードする"
-                onConfirm={() => {
-                    setConfirmingLoad(false);
-                    onLoadState();
-                }}
-                onCancel={() => setConfirmingLoad(false)}
-            />
         </div>
     );
 };

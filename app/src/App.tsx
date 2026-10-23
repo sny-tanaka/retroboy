@@ -3,65 +3,138 @@
 //   (commit edf90d9fb192372a657a18d44f5c9841805fa554)
 // Copyright smparsons. Licensed under the Apache License, Version 2.0.
 // 変更点: MUI の画面（StandardView / FullscreenView）とモーダル・チート・バックアップ・全画面・
-//   スクリーンショットを外し、素の要素だけの最小限の UI にした（見た目は後の PR で作り直す）。
-//   エラーはダイアログではなく画面内の文で出す。セーブステートの処理は emulator/saveState.ts に、
-//   状態とロジック（ROM の保存・自動読み込み・起動）は session/useRomSession.ts に切り出した。
+//   スクリーンショットを外し、ゲームボーイカラー風の本体（ui/GbcBody）にした。
+//   開始・読み込み中・エラーはダイアログではなくゲーム画面の中に出す。セーブステートの処理は
+//   emulator/saveState.ts に、状態とロジック（ROM の保存・自動読み込み・起動）は session/useRomSession.ts に切り出した。
 //   モードの選択は外し、ROM ヘッダの CGB フラグか拡張子 .gbc で決めるようにした。
-import { type ChangeEvent, useRef } from "react";
+import { type RefObject, useEffect, useRef, useState } from "react";
 
+import { pressKey, releaseKey } from "./core/retroboyCore";
 import GameScreen from "./emulator/GameScreen";
 import useRomSession, { type SessionStatus } from "./session/useRomSession";
-import type { StorageStatus } from "./storage/storageStatus";
+import type { GbButton } from "./ui/buttons";
+import { LoadStateConfirm } from "./ui/ConfirmDialog";
+import { GbcBody } from "./ui/GbcBody";
+import { MenuSheet } from "./ui/MenuSheet";
+import { RomMenu } from "./ui/RomMenu";
 
-const errorColor = "#ff6b6b";
-
-const StatusMessage = ({
+// ゲーム画面の中に出す案内（開始・読み込み中・エラー・ROM 未登録）。遊んでいる間は出さない
+const ScreenMessage = ({
     status,
     onStart,
+    onAddRom,
+    onOpenMenu,
 }: {
     status: SessionStatus;
     onStart: () => void;
+    onAddRom: () => void;
+    onOpenMenu: () => void;
 }) => {
     switch (status.kind) {
         case "booting":
-            return <p>保存した ROM を確認中…</p>;
-        case "noRom":
-            return <p>ROM を追加するか、一覧から選んでください。</p>;
+            return <p className="gbc-overlay-text">読み込み中…</p>;
         case "loading":
-            return <p>{status.message}</p>;
+            return <p className="gbc-overlay-text">{status.message}</p>;
+        case "noRom":
+            return (
+                <div className="gbc-overlay-panel">
+                    <p className="gbc-overlay-text">ROM が登録されていません</p>
+                    <button
+                        type="button"
+                        className="gbc-overlay-button"
+                        onClick={onAddRom}
+                    >
+                        ROM を追加
+                    </button>
+                </div>
+            );
         case "ready":
             return (
-                <p>
-                    <button onClick={onStart} style={{ fontSize: 18 }}>
-                        タップして開始
-                    </button>{" "}
-                    {status.rom.name}
-                </p>
-            );
-        case "running":
-            return (
-                <p>
-                    ゲーム: {status.title}（{status.rom.name}）
-                </p>
+                <button
+                    type="button"
+                    className="gbc-overlay-start"
+                    onClick={onStart}
+                >
+                    <span className="gbc-overlay-start-label">
+                        ▶ タップして開始
+                    </span>
+                    <span className="gbc-overlay-sub">{status.rom.name}</span>
+                </button>
             );
         case "error":
             return (
-                <div role="alert">
-                    <p style={{ color: errorColor }}>{status.message}</p>
-                    <p>
-                        <button onClick={status.retry}>再試行</button>{" "}
-                        または下の一覧から ROM を選び直してください。
+                <div className="gbc-overlay-panel" role="alert">
+                    <p className="gbc-overlay-text gbc-overlay-error">
+                        {status.message}
                     </p>
+                    <div className="gbc-overlay-actions">
+                        <button
+                            type="button"
+                            className="gbc-overlay-button"
+                            onClick={status.retry}
+                        >
+                            再試行
+                        </button>
+                        <button
+                            type="button"
+                            className="gbc-overlay-button gbc-overlay-secondary"
+                            onClick={onOpenMenu}
+                        >
+                            ROM を選び直す
+                        </button>
+                    </div>
                 </div>
             );
+        case "running":
+            return null;
     }
 };
 
-const formatStorage = ({ persisted, usageMB, quotaMB }: StorageStatus): string =>
-    [
-        `永続化: ${persisted === null ? "未対応" : persisted ? "許可" : "未許可"}`,
-        `使用量: ${usageMB ?? "?"} MB / ${quotaMB ?? "?"} MB`,
-    ].join("　");
+// 一時停止の理由になる、開いているもの
+type Overlay = "menu" | "confirm" | "romPicker" | "statePicker";
+type FilePicker = "romPicker" | "statePicker";
+
+// ファイル選択から戻ってきたあと、選んだファイルの change を待つ時間
+const PICKER_SETTLE_MS = 600;
+
+/**
+ * ファイル選択を閉じたら onClose を呼ぶ。選んだときは change（呼ぶ側）、やめたときは cancel で分かる。
+ * cancel が届かない環境（iOS 16.4 未満・ホーム画面のアプリなど）のために、画面に戻ってきたとき
+ * （visibilitychange で visible・window の focus）にも、少し待ってから呼ぶ（change を先に受けるため）。
+ * onClose は何度呼ばれてもよい作りにすること。
+ */
+const useFilePickerClose = (
+    inputRef: RefObject<HTMLInputElement | null>,
+    onClose: () => void,
+): void => {
+    const latest = useRef(onClose);
+    useEffect(() => {
+        latest.current = onClose;
+    });
+    useEffect(() => {
+        const input = inputRef.current;
+        if (!input) return;
+        const timers = new Set<ReturnType<typeof setTimeout>>();
+        const handleCancel = () => latest.current();
+        const handleBack = () => {
+            if (document.visibilityState !== "visible") return;
+            const timer = setTimeout(() => {
+                timers.delete(timer);
+                latest.current();
+            }, PICKER_SETTLE_MS);
+            timers.add(timer);
+        };
+        input.addEventListener("cancel", handleCancel);
+        window.addEventListener("focus", handleBack);
+        document.addEventListener("visibilitychange", handleBack);
+        return () => {
+            input.removeEventListener("cancel", handleCancel);
+            window.removeEventListener("focus", handleBack);
+            document.removeEventListener("visibilitychange", handleBack);
+            timers.forEach(clearTimeout);
+        };
+    }, []);
+};
 
 const App = () => {
     const session = useRomSession();
@@ -76,117 +149,211 @@ const App = () => {
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const romInputRef = useRef<HTMLInputElement>(null);
     const loadStateRef = useRef<HTMLInputElement>(null);
+    const [menuOpen, setMenuOpen] = useState(false);
+    const [confirmingLoad, setConfirmingLoad] = useState(false);
 
-    const openRomPicker = (): void => {
-        session.unlockAudio();
-        romInputRef.current?.click();
+    // メニュー・確認・ファイル選択を開いている間は一時停止し、全部閉じたら元の状態に戻す。
+    // 数ではなく名前で持つので、同じものを二重に閉じても数がずれない。
+    // ファイル選択の閉じた知らせが来ないまま残っても、ほかのものを開けば一時停止はする
+    const openRef = useRef(new Set<Overlay>());
+    const resumeAfterRef = useRef(false);
+    const hold = (overlay: Overlay): void => {
+        openRef.current.add(overlay);
+        if (playing) {
+            resumeAfterRef.current = true;
+            session.pause();
+        }
+    };
+    const release = (overlay: Overlay): void => {
+        if (!openRef.current.delete(overlay)) return;
+        if (openRef.current.size === 0 && resumeAfterRef.current) {
+            resumeAfterRef.current = false;
+            session.resume();
+        }
     };
 
-    const handleRomChange = (event: ChangeEvent<HTMLInputElement>): void => {
-        const file = event.target.files?.[0];
-        event.target.value = "";
+    // 何かを開いている間に読み込みが終わって動き出したら止め、全部閉じたときに再開する
+    // （メニューで ROM を選んだあと、読み込み中にメニューを開き直した場合など）
+    useEffect(() => {
+        if (playing && openRef.current.size > 0) {
+            resumeAfterRef.current = true;
+            session.pause();
+        }
+    }, [playing]);
+
+    // 一時停止ボタン。再開のときは、閉じた知らせが来ないまま残ったファイル選択も外す
+    const togglePause = (): void => {
+        resumeAfterRef.current = false;
+        if (paused) {
+            openRef.current.delete("romPicker");
+            openRef.current.delete("statePicker");
+            session.resume();
+        } else {
+            session.pause();
+        }
+    };
+
+    useFilePickerClose(romInputRef, () => release("romPicker"));
+    useFilePickerClose(loadStateRef, () => release("statePicker"));
+
+    const openMenu = (): void => {
+        if (menuOpen) return;
+        hold("menu");
+        setMenuOpen(true);
+    };
+    const closeMenu = (): void => {
+        setMenuOpen(false);
+        release("menu");
+    };
+
+    const openLoadConfirm = (): void => {
+        hold("confirm");
+        setConfirmingLoad(true);
+    };
+    const closeLoadConfirm = (): void => {
+        setConfirmingLoad(false);
+        release("confirm");
+    };
+
+    // クリックの中で呼ぶ（ファイル選択は利用者の操作の中でしか開けない）
+    const pickFile = (picker: FilePicker): void => {
+        const input = (picker === "romPicker" ? romInputRef : loadStateRef)
+            .current;
+        if (!input) return;
+        hold(picker);
+        input.click();
+    };
+
+    const openRomPicker = (): void => {
+        // 選んだ ROM をすぐ始められるよう、このクリックの中で音を使えるようにしておく
+        session.unlockAudio();
+        pickFile("romPicker");
+        closeMenu();
+    };
+
+    const handleRomChange = (): void => {
+        const input = romInputRef.current;
+        const file = input?.files?.[0];
+        if (input) input.value = "";
+        release("romPicker");
         if (file) void session.addRomFile(file);
     };
 
-    const handleLoadStateChange = (event: ChangeEvent<HTMLInputElement>): void => {
-        const file = event.target.files?.[0];
-        event.target.value = "";
-        if (file) void session.loadState(file);
+    const handleLoadStateChange = (): void => {
+        const input = loadStateRef.current;
+        const file = input?.files?.[0];
+        if (input) input.value = "";
+        if (file) {
+            void session.loadState(file).finally(() => release("statePicker"));
+        } else {
+            release("statePicker");
+        }
     };
 
+    const selectRom = (id: string): void => {
+        if (id !== currentRomId || !running) session.selectRom(id);
+        closeMenu();
+    };
+
+    // 方向・A/B・SELECT/START。止まっている間の押下はコアに送らない（離すのは常に送る）。
+    // 押している集合は覚えておき、再開したときに送り直す（一時停止でコア側のキーは全部離されるため）
+    const pressedRef = useRef(new Set<GbButton>());
+    const handleButtonDown = (button: GbButton): void => {
+        pressedRef.current.add(button);
+        if (playing) pressKey(button);
+    };
+    const handleButtonUp = (button: GbButton): void => {
+        pressedRef.current.delete(button);
+        releaseKey(button);
+    };
+    useEffect(() => {
+        if (playing) pressedRef.current.forEach(button => pressKey(button));
+    }, [playing]);
+
     return (
-        <main style={{ fontFamily: "sans-serif", padding: 16 }}>
-            <h1 style={{ fontSize: 20 }}>Retro Boy Snap</h1>
-
-            <StatusMessage status={status} onStart={session.startReadyRom} />
-
-            {session.notice && (
-                <p role="alert" style={{ color: errorColor }}>
-                    {session.notice}{" "}
-                    <button onClick={session.dismissNotice}>閉じる</button>
-                </p>
-            )}
-
-            <GameScreen canvasRef={canvasRef} playing={playing} paused={paused} />
-
-            <p>
-                {paused ? (
-                    <button onClick={session.resume}>再開</button>
-                ) : (
-                    <button onClick={session.pause} disabled={!playing}>
-                        一時停止
-                    </button>
-                )}{" "}
-                <button onClick={session.stop} disabled={!running}>
-                    止める
-                </button>{" "}
-                <button onClick={session.saveState} disabled={!running}>
-                    セーブステートを保存
-                </button>{" "}
-                <button
-                    onClick={() => loadStateRef.current?.click()}
-                    disabled={!running}
-                >
-                    セーブステートを読み込む
-                </button>
-                {/* accept は付けない（iOS は .rbs を知らず、ファイルを選べなくなることがある） */}
-                <input
-                    ref={loadStateRef}
-                    type="file"
-                    hidden
-                    onChange={handleLoadStateChange}
-                />
-            </p>
-
-            <section>
-                <h2 style={{ fontSize: 16 }}>保存した ROM</h2>
-                {roms.length === 0 ? (
-                    <p>まだありません。</p>
-                ) : (
-                    <ul>
-                        {roms.map(rom => (
-                            <li key={rom.id}>
-                                <button
-                                    onClick={() => session.selectRom(rom.id)}
-                                    disabled={running || busy}
-                                >
-                                    {rom.id === currentRomId ? "▶ " : ""}
-                                    {rom.name}
-                                </button>
-                            </li>
-                        ))}
-                    </ul>
-                )}
-                <p>
-                    <button onClick={openRomPicker} disabled={running || busy}>
-                        ROM を追加
-                    </button>
-                    {/* accept は付けない（iOS は .gb / .gbc を知らず、ファイルを選べなくなることがある） */}
-                    <input
-                        ref={romInputRef}
-                        type="file"
-                        hidden
-                        onChange={handleRomChange}
+        <>
+            <GbcBody
+                screen={
+                    <GameScreen
+                        canvasRef={canvasRef}
+                        playing={playing}
+                        paused={paused}
                     />
-                </p>
-                {running && (
-                    <p style={{ fontSize: 14 }}>
-                        ROM を替えるときは「止める」を押してください。
-                    </p>
-                )}
-            </section>
-
-            <p style={{ fontSize: 14 }}>
-                操作: 十字キー = 矢印キー / A = Z / B = X / START = Enter /
-                SELECT = Space
-            </p>
-
-            {session.storageStatus && (
-                <p style={{ fontSize: 12, color: "#9e9e9e" }}>
-                    {formatStorage(session.storageStatus)}
-                </p>
-            )}
-        </main>
+                }
+                screenOverlay={
+                    status.kind === "running" && !session.notice ? null : (
+                        <>
+                            <ScreenMessage
+                                status={status}
+                                onStart={session.startReadyRom}
+                                onAddRom={openRomPicker}
+                                onOpenMenu={openMenu}
+                            />
+                            {session.notice && (
+                                <div className="gbc-notice" role="alert">
+                                    <span>{session.notice}</span>
+                                    <button
+                                        type="button"
+                                        onClick={session.dismissNotice}
+                                    >
+                                        閉じる
+                                    </button>
+                                </div>
+                            )}
+                        </>
+                    )
+                }
+                powerOn={running}
+                paused={paused}
+                gameActive={running}
+                inert={menuOpen || confirmingLoad}
+                onTogglePause={togglePause}
+                onSaveState={session.saveState}
+                onLoadState={openLoadConfirm}
+                onOpenMenu={openMenu}
+                onButtonDown={handleButtonDown}
+                onButtonUp={handleButtonUp}
+            />
+            <MenuSheet open={menuOpen} onClose={closeMenu}>
+                <RomMenu
+                    roms={roms}
+                    currentRomId={currentRomId}
+                    busy={busy}
+                    gameActive={running}
+                    storageStatus={session.storageStatus}
+                    onSelectRom={selectRom}
+                    onAddRom={openRomPicker}
+                    onExportState={session.saveState}
+                    onImportState={() => {
+                        // 確認を先に開いてからメニューを閉じる（その間に再開しないように）
+                        openLoadConfirm();
+                        closeMenu();
+                    }}
+                />
+            </MenuSheet>
+            <LoadStateConfirm
+                open={confirmingLoad}
+                onConfirm={() => {
+                    // ファイル選択を先に開いてから確認を閉じる（その間に再開しないように）
+                    pickFile("statePicker");
+                    closeLoadConfirm();
+                }}
+                onCancel={closeLoadConfirm}
+            />
+            {/* accept は付けない（iOS は .gb / .gbc / .rbs を知らず、ファイルを選べなくなることがある） */}
+            <input
+                ref={romInputRef}
+                type="file"
+                hidden
+                onChange={handleRomChange}
+            />
+            <input
+                ref={loadStateRef}
+                type="file"
+                hidden
+                onChange={handleLoadStateChange}
+            />
+        </>
     );
 };
 
