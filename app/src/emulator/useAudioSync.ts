@@ -3,6 +3,8 @@
 // Copyright smparsons. Licensed under the Apache License, Version 2.0.
 // 変更点: window への代入に型を付けた。次の step の setTimeout を ref に持ち、一時停止とアンマウントで
 //   解除するようにした（本家では一時停止してすぐ再開するとループが 2 本走り、倍速になって音も重なる）。
+//   再生の予定が今より MAX_LAG 以上遅れたら、追いつかずに今に合わせ直すようにした（本家ではメインスレッドが
+//   止まったあと、遅れを取り戻すまで step が待ちなしで続き、倍速になる）。
 //
 // エミュレーターの進行は音で駆動する: stepUntilNextAudioBuffer() が 1 バッファ分進めて
 // window.playAudioSamples を呼び、その再生直前のタイミングで次の step を予約する。
@@ -11,6 +13,8 @@ import { type RefObject, useCallback, useEffect, useRef } from "react";
 import { stepUntilNextAudioBuffer } from "../core/retroboyCore";
 
 const GAP_BEFORE_SAMPLE_PLAY = 15;
+// 秒。これ以上遅れたら、遅れた分の音とゲームの進みは捨てる。少しの遅れは、音が途切れないよう追いつく
+const MAX_LAG = 0.1;
 
 const useAudioSync = (
     playing: boolean,
@@ -84,6 +88,13 @@ const useAudioSync = (
                 const duration = bufferLength / audioContext.sampleRate;
 
                 bufferSource.connect(audioContext.destination);
+
+                if (
+                    nextPlayTimeRef.current <
+                    audioContext.currentTime - MAX_LAG
+                ) {
+                    nextPlayTimeRef.current = audioContext.currentTime;
+                }
 
                 bufferSource.start(nextPlayTimeRef.current);
 

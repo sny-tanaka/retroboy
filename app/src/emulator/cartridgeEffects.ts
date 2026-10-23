@@ -1,15 +1,20 @@
 // 出どころ: smparsons/retroboy frontends/web/src/cartridgeEffects.ts
 //   (commit edf90d9fb192372a657a18d44f5c9841805fa554)
 // Copyright smparsons. Licensed under the Apache License, Version 2.0.
-// 変更点: lodash/debounce を、保留中の保存を即時に書き出せる（flushPendingSaves）小さな debounce に置き換え、
-//   待ちの上限（MAX_WAIT）を付けた。読めない保存値は "<種類>-corrupt:<ROM の ID>" に退避する。
+// 変更点: lodash/debounce をやめ、書き込み待ちの値を 10 秒ごと（SAVE_INTERVAL）にまとめて書き出すようにした
+//   （書き込み待ちが無ければ書かない）。flushPendingSaves で即時にも書き出せる。
+//   読めない保存値は "<種類>-corrupt:<ROM の ID>" に退避する。
 //   保存先は localStorage のままだが、キーをカートリッジのタイトルから ROM の ID（SHA-256）に替え、
 //   ROM ごとにセーブが分かれるようにした（setActiveRomId）。pagehide / visibilitychange(hidden) で即時保存する。
-//   保存の失敗は onSaveError で画面に知らせる。window への代入に型を付けた。詳しくは docs/upstream-notes.md。
+//   保存の失敗は onSaveError で画面に知らせる。window への代入に型を付けた。
+//   saveRam は呼ばれるたびに base64 にせず、その step の終わりに 1 回だけ RAM を写し、base64 にするのは
+//   書き出すときにした（本家も lodash/debounce が呼び出しをまとめていたので重くなかった）。
+//   詳しくは docs/upstream-notes.md。
 import { WasmRTCState } from "../core/retroboyCore";
 
-const DEBOUNCE_DELAY = 2000;
-const MAX_WAIT = 10000;
+// 書き込みごとではなく固定の間隔で書き出す。localStorage への書き込みと base64 への変換が、
+// セーブのたびではなく最大でもこの間隔に 1 回になる
+const SAVE_INTERVAL = 10000;
 
 // localStorage のキー。本家はタイトルそのもの（RTC は "<タイトル>-rtc"）をキーにしていた
 const ramStorageKey = (romId: string): string => `sram:${romId}`;
@@ -46,27 +51,22 @@ const notifySaveError = (message: string): void => {
     saveErrorListeners.forEach(listener => listener(message));
 };
 
-// 書き込み待ちの値（localStorage のキー → 文字列）。キーはコアから呼ばれた時点で決めるので、
-// 書き出す前に ROM を切り替えても前の ROM のキーに保存される
-const pendingWrites = new Map<string, string>();
-// 本家と同じく、キーごとに debounce する（RTC の頻繁な保存でセーブ RAM の保存が遅れないように）
-const writeTimers = new Map<string, ReturnType<typeof setTimeout>>();
-// キーごとの書き出しの期限（保留が始まってから MAX_WAIT 後）
-const writeDeadlines = new Map<string, number>();
+// 書き込み待ちの値（localStorage のキー → 文字列か、まだ base64 にしていないセーブ RAM の写し）。
+// キーはコアから呼ばれた時点で決めるので、書き出す前に ROM を切り替えても前の ROM のキーに保存される
+const pendingWrites = new Map<string, string | Uint8Array>();
 
 const writeNow = (key: string): void => {
-    clearTimeout(writeTimers.get(key));
-    writeTimers.delete(key);
     const value = pendingWrites.get(key);
     if (value === undefined) return;
     try {
-        localStorage.setItem(key, value);
+        localStorage.setItem(
+            key,
+            typeof value === "string" ? value : uint8ArrayToBase64(value),
+        );
         pendingWrites.delete(key);
-        writeDeadlines.delete(key);
     } catch (err) {
-        // 失敗した値は残し、次の保存（次の書き込みか画面を離れるとき）で書き直す。
-        // 毎フレーム書き直して失敗し続けないよう、次の期限は今から数え直す
-        writeDeadlines.set(key, Date.now() + MAX_WAIT);
+        // 失敗した値は残し、次の書き出し（次の間隔か画面を離れるとき）で書き直す。
+        // それまでに新しい書き込みがあれば、そちらに置き換わる
         console.error("ゲーム内セーブの保存に失敗しました:", err);
         notifySaveError(
             "ゲーム内セーブを端末に保存できませんでした。空き容量を確かめてください。",
@@ -75,29 +75,14 @@ const writeNow = (key: string): void => {
 };
 
 export const flushPendingSaves = (): void => {
+    snapshotRam();
     [...pendingWrites.keys()].forEach(writeNow);
 };
 
-// lodash/debounce の trailing と同じく、最後の書き込みから DEBOUNCE_DELAY 後に書き出す。
-// ただし MBC3 は RTC のラッチのたびに保存を呼び、毎フレームラッチするゲームではタイマーが延び続けるので、
-// 保留が始まってから MAX_WAIT たったら必ず書く（lodash の maxWait にあたる）
-const scheduleWrite = (key: string, value: string): void => {
+// 書き込み待ちにするだけ。書き出すのは SAVE_INTERVAL ごとか flushPendingSaves のとき
+const scheduleWrite = (key: string, value: string | Uint8Array): void => {
     if (writeBlockedKeys.has(key)) return;
     pendingWrites.set(key, value);
-    const now = Date.now();
-    let deadline = writeDeadlines.get(key);
-    if (deadline === undefined) {
-        deadline = now + MAX_WAIT;
-        writeDeadlines.set(key, deadline);
-    }
-    clearTimeout(writeTimers.get(key));
-    writeTimers.set(
-        key,
-        setTimeout(
-            () => writeNow(key),
-            Math.max(0, Math.min(DEBOUNCE_DELAY, deadline - now)),
-        ),
-    );
 };
 
 // 退避できなかった壊れたセーブのキー。空のセーブで上書きして消さないよう、書き込みを止める
@@ -132,7 +117,10 @@ const currentTimeMillis = () => Date.now();
 const loadRTCState = (): WasmRTCState | null => {
     const key = resolveKey(rtcStorageKey);
     if (!key) return null;
-    const item = pendingWrites.get(key) ?? localStorage.getItem(key);
+    // RTC の書き込み待ちは文字列だけ（Uint8Array になるのはセーブ RAM）
+    const pending = pendingWrites.get(key);
+    const item =
+        typeof pending === "string" ? pending : localStorage.getItem(key);
     if (item) {
         try {
             const parsed = JSON.parse(item);
@@ -183,10 +171,21 @@ const base64ToUint8Array = (base64: string): Uint8Array => {
     return bytes;
 };
 
+const uint8ArrayToBase64 = (bytes: Uint8Array): string => {
+    // 1 バイトずつ配列にすると遅いので、まとめて文字にする（引数の数の上限を超えないよう区切る）
+    let binaryString = "";
+    for (let i = 0; i < bytes.length; i += 0x2000) {
+        binaryString += String.fromCharCode(...bytes.subarray(i, i + 0x2000));
+    }
+    return btoa(binaryString);
+};
+
 const loadRam = (): Uint8Array | null => {
     const key = resolveKey(ramStorageKey);
     if (!key) return null;
-    const encodedCartridgeRam = pendingWrites.get(key) ?? localStorage.getItem(key);
+    const pending = pendingWrites.get(key);
+    if (pending instanceof Uint8Array) return pending.slice();
+    const encodedCartridgeRam = pending ?? localStorage.getItem(key);
     if (encodedCartridgeRam) {
         try {
             return base64ToUint8Array(encodedCartridgeRam);
@@ -198,13 +197,38 @@ const loadRam = (): Uint8Array | null => {
     return null;
 };
 
+// コアは RAM に 1 バイト書くたびに saveRam を呼ぶ（ゲームは起動時やセーブ時に数 KB〜数十 KB をまとめて書くので、
+// 1 回の step の中で数千〜数万回になる）。呼ばれたときは RAM の場所だけ覚え、step が終わったあと（microtask）に
+// 1 回だけ写して書き込み待ちにする。base64 にするのは書き出すとき
+let wasmMemory: WebAssembly.Memory | null = null;
+let pendingRam: { key: string; byteOffset: number; length: number } | null =
+    null;
+
+// init() の戻り値の memory を渡す（saveRam の前に）
+export const setWasmMemory = (memory: WebAssembly.Memory): void => {
+    wasmMemory = memory;
+};
+
+const snapshotRam = (): void => {
+    if (!pendingRam || !wasmMemory) return;
+    const { key, byteOffset, length } = pendingRam;
+    pendingRam = null;
+    // コアから渡された Uint8Array は WASM のメモリの一部を指すだけで、メモリが広がると読めなくなる。
+    // カートリッジの RAM の場所は ROM を読み込んでいる間は変わらないので、今のメモリから読み直して写す
+    scheduleWrite(
+        key,
+        new Uint8Array(wasmMemory.buffer, byteOffset, length).slice(),
+    );
+};
+
 const saveRam = (_title: string, value: Uint8Array): void => {
     const key = resolveKey(ramStorageKey);
     if (!key) return;
-    const binaryString = Array.from(value)
-        .map(byte => String.fromCharCode(byte))
-        .join("");
-    scheduleWrite(key, btoa(binaryString));
+    if (pendingRam?.key !== key) {
+        snapshotRam();
+        queueMicrotask(snapshotRam);
+    }
+    pendingRam = { key, byteOffset: value.byteOffset, length: value.length };
 };
 
 const registerCartridgeEffects = (): void => {
@@ -214,7 +238,8 @@ const registerCartridgeEffects = (): void => {
     window.loadRam = loadRam;
     window.saveRam = saveRam;
 
-    // iPhone でホームに戻す・アプリを閉じるときに、2 秒待ちのセーブを失わないよう即時に書き出す
+    setInterval(flushPendingSaves, SAVE_INTERVAL);
+    // iPhone でホームに戻す・アプリを閉じるときに、書き込み待ちのセーブを失わないよう即時に書き出す
     window.addEventListener("pagehide", flushPendingSaves);
     document.addEventListener("visibilitychange", () => {
         if (document.visibilityState === "hidden") {
