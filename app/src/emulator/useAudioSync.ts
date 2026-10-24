@@ -5,14 +5,16 @@
 //   解除するようにした（本家では一時停止してすぐ再開するとループが 2 本走り、倍速になって音も重なる）。
 //   再生の予定が今より MAX_LAG 以上遅れたら、追いつかずに今に合わせ直すようにした（本家ではメインスレッドが
 //   止まったあと、遅れを取り戻すまで step が待ちなしで続き、倍速になる）。
-//   倍速（speed）を足した。1 バッファを playbackRate = speed で鳴らし（早送りの音）、次の再生の予定を
-//   1/speed の時間だけ進める。遅れの合わせ直しは実時間で見るので、追いつかなければ速さが落ちるだけ。
+//   倍速（speed）を足した。倍速のときは 1 バッファを timeStretch.ts で高さを変えずに 1/speed の長さに
+//   縮めて等速で鳴らし、次の再生の予定をその長さだけ進める（×1 では素通し）。遅れの合わせ直しは実時間で
+//   見るので、追いつかなければ速さが落ちるだけ。
 //
 // エミュレーターの進行は音で駆動する: stepUntilNextAudioBuffer() が 1 バッファ分進めて
 // window.playAudioSamples を呼び、その再生直前のタイミングで次の step を予約する。
 import { type RefObject, useCallback, useEffect, useRef } from "react";
 
 import { stepUntilNextAudioBuffer } from "../core/retroboyCore";
+import { TimeStretcher } from "./timeStretch";
 
 const GAP_BEFORE_SAMPLE_PLAY = 15;
 // 秒。これ以上遅れたら、遅れた分の音とゲームの進みは捨てる。少しの遅れは、音が途切れないよう追いつく
@@ -30,6 +32,8 @@ const useAudioSync = (
         speedRef.current = speed;
     }, [speed]);
     const scheduledResetRef = useRef<boolean>(false);
+    // 倍速の音を縮める。区間の長さがサンプルレートで決まるので、AudioContext のサンプルレートで作る
+    const stretcherRef = useRef<TimeStretcher | null>(null);
 
     const nextPlayTimeRef = useRef<number>(0);
     const stepTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(
@@ -72,35 +76,24 @@ const useAudioSync = (
             const audioContext = audioContextRef.current;
 
             if (audioContext) {
-                const bufferLength = leftAudioSamples.length;
-                if (bufferLength === 0) {
+                if (leftAudioSamples.length === 0) {
                     return;
                 }
-                const audioBuffer = audioContext.createBuffer(
-                    2,
-                    bufferLength,
-                    audioContext.sampleRate,
-                );
-
-                const leftChannel = audioBuffer.getChannelData(0);
-                const rightChannel = audioBuffer.getChannelData(1);
-
-                for (let i = 0; i < bufferLength; i++) {
-                    leftChannel[i] = leftAudioSamples[i];
-                    rightChannel[i] = rightAudioSamples[i];
+                if (
+                    stretcherRef.current?.sampleRate !== audioContext.sampleRate
+                ) {
+                    stretcherRef.current = new TimeStretcher(
+                        audioContext.sampleRate,
+                    );
                 }
-
-                const bufferSource = audioContext.createBufferSource();
-                bufferSource.buffer = audioBuffer;
-
-                // 1 バッファはゲームの中では bufferLength / sampleRate 秒。
-                // 速く鳴らす（高く速い音になる）と、実時間では 1/speed になる
-                const speed = speedRef.current;
-                bufferSource.playbackRate.value = speed;
-                const duration =
-                    bufferLength / audioContext.sampleRate / speed;
-
-                bufferSource.connect(audioContext.destination);
+                // 倍速では高さを変えずに 1/speed の長さに縮める。×1 では受け取ったものがそのまま返る
+                const [left, right] = stretcherRef.current.process(
+                    leftAudioSamples,
+                    rightAudioSamples,
+                    speedRef.current,
+                );
+                const bufferLength = left.length;
+                const duration = bufferLength / audioContext.sampleRate;
 
                 if (
                     nextPlayTimeRef.current <
@@ -109,7 +102,27 @@ const useAudioSync = (
                     nextPlayTimeRef.current = audioContext.currentTime;
                 }
 
-                bufferSource.start(nextPlayTimeRef.current);
+                // 倍速に切り替えた直後は、縮めた音がまだできていないことがある。鳴らさずに次の step へ進む
+                if (bufferLength > 0) {
+                    const audioBuffer = audioContext.createBuffer(
+                        2,
+                        bufferLength,
+                        audioContext.sampleRate,
+                    );
+
+                    const leftChannel = audioBuffer.getChannelData(0);
+                    const rightChannel = audioBuffer.getChannelData(1);
+
+                    for (let i = 0; i < bufferLength; i++) {
+                        leftChannel[i] = left[i];
+                        rightChannel[i] = right[i];
+                    }
+
+                    const bufferSource = audioContext.createBufferSource();
+                    bufferSource.buffer = audioBuffer;
+                    bufferSource.connect(audioContext.destination);
+                    bufferSource.start(nextPlayTimeRef.current);
+                }
 
                 const waitTime =
                     (nextPlayTimeRef.current - audioContext.currentTime) * 1000;
