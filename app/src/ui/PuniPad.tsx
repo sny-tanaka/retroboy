@@ -51,7 +51,8 @@ const show = (
 
 /**
  * 指の位置から方向を返す（ぷにコンの判定）。memo.ox / memo.oy が無ければ、いまの位置を中心にする。
- * 中心から maxRadius より離れたら、中心を指の方へ引っぱる。見た目の CSS 変数も更新する。
+ * 中心から maxRadius より離れたら、中心を指の方へ引っぱる（fixedCenter なら中心は動かさず、
+ * 指の丸だけを maxRadius で止める）。見た目の CSS 変数も更新する。
  */
 export const trackPuni = (
     x: number,
@@ -59,6 +60,7 @@ export const trackPuni = (
     element: HTMLElement,
     memo: Record<string, number>,
     { deadZone, maxRadius }: PuniSize,
+    fixedCenter = false,
 ): GbButton[] => {
     if (memo.ox === undefined) {
         memo.ox = x;
@@ -71,8 +73,10 @@ export const trackPuni = (
         // 中心を指の方へ引っぱる（向きはそのまま、距離は maxRadius に保つ）
         dx = (dx / distance) * maxRadius;
         dy = (dy / distance) * maxRadius;
-        memo.ox = x - dx;
-        memo.oy = y - dy;
+        if (!fixedCenter) {
+            memo.ox = x - dx;
+            memo.oy = y - dy;
+        }
     }
     show(element, memo.ox, memo.oy, dx, dy);
     return toButtons(dx, dy, deadZone);
