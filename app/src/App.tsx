@@ -182,18 +182,24 @@ const App = () => {
     // 数ではなく名前で持つので、同じものを二重に閉じても数がずれない。
     // ファイル選択の閉じた知らせが来ないまま残っても、ほかのものを開けば一時停止はする
     const openRef = useRef(new Set<Overlay>());
+    // 全部閉じたら再開するか。メニューに「一時停止」か「再開」かを出すのにも使うので state にも持つ
     const resumeAfterRef = useRef(false);
+    const [resumeAfter, setResumeAfterState] = useState(false);
+    const setResumeAfter = (value: boolean): void => {
+        resumeAfterRef.current = value;
+        setResumeAfterState(value);
+    };
     const hold = (overlay: Overlay): void => {
         openRef.current.add(overlay);
         if (playing) {
-            resumeAfterRef.current = true;
+            setResumeAfter(true);
             session.pause();
         }
     };
     const release = (overlay: Overlay): void => {
         if (!openRef.current.delete(overlay)) return;
         if (openRef.current.size === 0 && resumeAfterRef.current) {
-            resumeAfterRef.current = false;
+            setResumeAfter(false);
             session.resume();
         }
     };
@@ -202,21 +208,20 @@ const App = () => {
     // （メニューで ROM を選んだあと、読み込み中にメニューを開き直した場合など）
     useEffect(() => {
         if (playing && openRef.current.size > 0) {
-            resumeAfterRef.current = true;
+            setResumeAfter(true);
             session.pause();
         }
     }, [playing]);
 
-    // 一時停止ボタン。再開のときは、閉じた知らせが来ないまま残ったファイル選択も外す
-    const togglePause = (): void => {
-        resumeAfterRef.current = false;
-        if (paused) {
-            openRef.current.delete("romPicker");
-            openRef.current.delete("statePicker");
-            session.resume();
-        } else {
-            session.pause();
-        }
+    // 自分で止めている（メニューなどを開いたことによる一時停止ではない）
+    const userPaused = paused && !resumeAfter;
+
+    // 再開（「一時停止中」の画面・メニューの「再開」）。閉じた知らせが来ないまま残ったファイル選択も外す
+    const resumeByUser = (): void => {
+        setResumeAfter(false);
+        openRef.current.delete("romPicker");
+        openRef.current.delete("statePicker");
+        session.resume();
     };
 
     useFilePickerClose(romInputRef, () => release("romPicker"));
@@ -230,6 +235,19 @@ const App = () => {
     const closeMenu = (): void => {
         setMenuOpen(false);
         release("menu");
+    };
+
+    // メニューの「一時停止」「再開」。押したらメニューを閉じる
+    const toggleUserPause = (): void => {
+        if (userPaused) {
+            closeMenu();
+            resumeByUser();
+        } else {
+            // 閉じても再開しないようにしてから閉じる（メニューを開いた時点でもう止まっている）
+            setResumeAfter(false);
+            session.pause();
+            closeMenu();
+        }
     };
 
     const openLoadConfirm = (source: "slot" | "file"): void => {
@@ -374,7 +392,9 @@ const App = () => {
                 paused={paused}
                 gameActive={running}
                 inert={menuOpen || confirmingLoad !== null}
-                onTogglePause={togglePause}
+                speed={session.speed}
+                onCycleSpeed={session.cycleSpeed}
+                onResume={resumeByUser}
                 onSaveState={() => session.saveToSlot(canvasRef.current)}
                 onLoadState={() => openLoadConfirm("slot")}
                 canLoadState={
@@ -405,6 +425,8 @@ const App = () => {
                     }}
                     controlLayout={controlLayout}
                     onSelectControlLayout={selectControlLayout}
+                    paused={userPaused}
+                    onTogglePause={toggleUserPause}
                 />
             </MenuSheet>
             <LoadStateConfirm

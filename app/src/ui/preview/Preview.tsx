@@ -7,6 +7,7 @@ import { ControlLayoutMenu } from "../ControlLayoutMenu";
 import { GbcBody } from "../GbcBody";
 import type { GestureBTrigger } from "../GestureControls";
 import { MenuSheet } from "../MenuSheet";
+import { PauseMenu } from "../RomMenu";
 import { GB_HEIGHT, GB_WIDTH } from "../useScreenSize";
 
 const ORDER: GbButton[] = [
@@ -113,6 +114,7 @@ export const Preview = () => {
     const [pressed, setPressed] = useState<ReadonlySet<GbButton>>(new Set());
     const [lastAction, setLastAction] = useState("-");
     const [paused, setPaused] = useState(false);
+    const [speed, setSpeed] = useState(1);
     const [menuOpen, setMenuOpen] = useState(false);
     const [confirmingLoad, setConfirmingLoad] = useState(false);
     const [layout, setLayout] = useControlLayout(initialLayout);
@@ -151,9 +153,15 @@ export const Preview = () => {
                     });
                     setLastAction(`RELEASE ${button.toUpperCase()}`);
                 }}
-                onTogglePause={() => {
-                    setPaused(prev => !prev);
-                    setLastAction("PAUSE");
+                speed={speed}
+                onCycleSpeed={() => {
+                    const next = speed === 1 ? 1.5 : speed === 1.5 ? 2 : 1;
+                    setSpeed(next);
+                    setLastAction(`SPEED X${next}`);
+                }}
+                onResume={() => {
+                    setPaused(false);
+                    setLastAction("RESUME");
                 }}
                 onSaveState={() => {
                     const savedAt = Date.now();
@@ -173,6 +181,15 @@ export const Preview = () => {
             />
             {showReach && <ThumbReach />}
             <MenuSheet open={menuOpen} onClose={() => setMenuOpen(false)}>
+                <PauseMenu
+                    paused={paused}
+                    disabled={false}
+                    onTogglePause={() => {
+                        setPaused(!paused);
+                        setLastAction(paused ? "RESUME" : "PAUSE");
+                        setMenuOpen(false);
+                    }}
+                />
                 <p style={{ color: "#9a94b0" }}>
                     ここに ROM の選択・切り替えなどが入ります。
                 </p>

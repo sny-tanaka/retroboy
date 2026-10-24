@@ -35,9 +35,14 @@ export interface GbcBodyProps extends GbButtonHandlers {
     readonly screenOverlay?: ReactNode;
     readonly powerOn: boolean;
     readonly paused: boolean;
-    /** false のとき、一時停止・セーブ・ロードを押せなくする（ゲームが動いていないとき）。既定は true */
+    /** false のとき、倍速・セーブ・ロードを押せなくする（ゲームが動いていないとき）。既定は true */
     readonly gameActive?: boolean;
-    readonly onTogglePause: () => void;
+    /** いまの速さ（1 / 1.5 / 2）。倍速ボタンに出す */
+    readonly speed: number;
+    /** 倍速ボタンを押した（×1 → ×1.5 → ×2 → ×1） */
+    readonly onCycleSpeed: () => void;
+    /** 「一時停止中」の画面を押した（再開する） */
+    readonly onResume: () => void;
     readonly onSaveState: () => void;
     /** 「ロード」を押した。上書きの確認（ConfirmDialog）は呼ぶ側で出す */
     readonly onLoadState: () => void;
@@ -53,14 +58,12 @@ const MenuIcon = () => (
         <path d="M4 7h16M4 12h16M4 17h16" />
     </svg>
 );
-const PauseIcon = () => (
+const FastForwardIcon = () => (
     <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M9 6v12M15 6v12" />
-    </svg>
-);
-const PlayIcon = () => (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M8 5.5v13l10.5-6.5z" className="gbc-icon-fill" />
+        <path
+            d="M3 6v12l8.5-6zM12 6v12l8.5-6z"
+            className="gbc-icon-fill"
+        />
     </svg>
 );
 const SaveIcon = () => (
@@ -107,7 +110,9 @@ export const GbcBody = ({
     screenOverlay,
     powerOn,
     paused,
-    onTogglePause,
+    speed,
+    onCycleSpeed,
+    onResume,
     onSaveState,
     onLoadState,
     canLoadState = true,
@@ -157,9 +162,16 @@ export const GbcBody = ({
                     >
                         {screen}
                         {paused && (
-                            <div className="gbc-screen-overlay gbc-paused">
-                                一時停止中
-                            </div>
+                            <button
+                                type="button"
+                                className="gbc-screen-overlay gbc-paused"
+                                onClick={onResume}
+                            >
+                                <span>一時停止中</span>
+                                <span className="gbc-paused-sub">
+                                    タップで再開
+                                </span>
+                            </button>
                         )}
                         {screenOverlay && (
                             <div className="gbc-screen-overlay">
@@ -178,13 +190,14 @@ export const GbcBody = ({
                         </button>
                         <button
                             type="button"
-                            className="gbc-sub-button"
-                            onClick={onTogglePause}
-                            aria-pressed={paused}
+                            className="gbc-sub-button gbc-speed-button"
+                            onClick={onCycleSpeed}
+                            data-fast={speed !== 1 || undefined}
+                            aria-label={`速さ ×${speed}（押すと切り替え）`}
                             disabled={!gameActive}
                         >
-                            {paused ? <PlayIcon /> : <PauseIcon />}
-                            {paused ? "再開" : "一時停止"}
+                            <FastForwardIcon />
+                            <span className="gbc-speed-value">×{speed}</span>
                         </button>
                         <span className="gbc-strip-spacer" />
                         <button

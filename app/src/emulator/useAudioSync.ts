@@ -5,6 +5,8 @@
 //   解除するようにした（本家では一時停止してすぐ再開するとループが 2 本走り、倍速になって音も重なる）。
 //   再生の予定が今より MAX_LAG 以上遅れたら、追いつかずに今に合わせ直すようにした（本家ではメインスレッドが
 //   止まったあと、遅れを取り戻すまで step が待ちなしで続き、倍速になる）。
+//   倍速（speed）を足した。1 バッファを playbackRate = speed で鳴らし（早送りの音）、次の再生の予定を
+//   1/speed の時間だけ進める。遅れの合わせ直しは実時間で見るので、追いつかなければ速さが落ちるだけ。
 //
 // エミュレーターの進行は音で駆動する: stepUntilNextAudioBuffer() が 1 バッファ分進めて
 // window.playAudioSamples を呼び、その再生直前のタイミングで次の step を予約する。
@@ -19,8 +21,14 @@ const MAX_LAG = 0.1;
 const useAudioSync = (
     playing: boolean,
     resetGameCallback: () => void,
+    // 速さ（1 で等速）。変えると次に鳴らすバッファから効く
+    speed: number,
 ): [RefObject<AudioContext | null>, () => void] => {
     const audioContextRef = useRef<AudioContext | null>(null);
+    const speedRef = useRef(speed);
+    useEffect(() => {
+        speedRef.current = speed;
+    }, [speed]);
     const scheduledResetRef = useRef<boolean>(false);
 
     const nextPlayTimeRef = useRef<number>(0);
@@ -85,7 +93,12 @@ const useAudioSync = (
                 const bufferSource = audioContext.createBufferSource();
                 bufferSource.buffer = audioBuffer;
 
-                const duration = bufferLength / audioContext.sampleRate;
+                // 1 バッファはゲームの中では bufferLength / sampleRate 秒。
+                // 速く鳴らす（高く速い音になる）と、実時間では 1/speed になる
+                const speed = speedRef.current;
+                bufferSource.playbackRate.value = speed;
+                const duration =
+                    bufferLength / audioContext.sampleRate / speed;
 
                 bufferSource.connect(audioContext.destination);
 

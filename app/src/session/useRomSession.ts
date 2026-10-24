@@ -162,6 +162,10 @@ const toSummary = ({ id, name, createdAt }: RomRecord): RomSummary => ({
     createdAt,
 });
 
+// 倍速ボタンで回る速さ（この順に回る）
+export const GAME_SPEEDS = [1, 1.5, 2] as const;
+export type GameSpeed = (typeof GAME_SPEEDS)[number];
+
 const messageOf = (err: unknown, fallback: string): string =>
     err instanceof RomStorageError ? err.message : fallback;
 
@@ -215,11 +219,20 @@ const useRomSession = () => {
 
     useKeyListeners(playing);
 
+    // 倍速。覚えない（起動時は ×1）。ROM を始めるとき・止めたときにも ×1 に戻す
+    const [speed, setSpeed] = useState<GameSpeed>(1);
+    const cycleSpeed = (): void =>
+        setSpeed(current => {
+            const next = GAME_SPEEDS.indexOf(current) + 1;
+            return GAME_SPEEDS[next % GAME_SPEEDS.length];
+        });
+
     // 停止（本家のリセット）。同じ ROM の「タップして開始」に戻る
     const stopGame = (): void => {
         flushPendingSaves();
         resetEmulator();
         setActiveRomId(null);
+        setSpeed(1);
         setStatus(current =>
             current.kind === "running"
                 ? { kind: "ready", rom: current.rom }
@@ -227,7 +240,11 @@ const useRomSession = () => {
         );
     };
 
-    const [audioContextRef, startReset] = useAudioSync(playing, stopGame);
+    const [audioContextRef, startReset] = useAudioSync(
+        playing,
+        stopGame,
+        speed,
+    );
 
     // ユーザー操作（クリック・タップ）の中で呼ぶ
     const unlockAudio = (): void => {
@@ -265,6 +282,7 @@ const useRomSession = () => {
             return;
         }
         currentRomRef.current = rom;
+        setSpeed(1);
         setStatus({
             kind: "running",
             rom: toSummary(rom),
@@ -551,6 +569,8 @@ const useRomSession = () => {
         addRomFile,
         pause,
         resume,
+        speed,
+        cycleSpeed,
         stop: startReset,
         slot,
         flash,

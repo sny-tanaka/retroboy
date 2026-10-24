@@ -24,7 +24,33 @@ interface RomMenuProps {
     /** 操作の配置（両手・片手 A・片手 B） */
     readonly controlLayout: ControlLayout;
     readonly onSelectControlLayout: (layout: ControlLayout) => void;
+    /** 自分で一時停止している（メニューを開いたことによる一時停止は含めない） */
+    readonly paused: boolean;
+    readonly onTogglePause: () => void;
 }
+
+/** メニューの一番上の「一時停止」「再開」。押すとメニューは閉じる（呼ぶ側で閉じる） */
+export const PauseMenu = ({
+    paused,
+    disabled,
+    onTogglePause,
+}: {
+    readonly paused: boolean;
+    readonly disabled: boolean;
+    readonly onTogglePause: () => void;
+}) => (
+    <section className="gbc-menu-section">
+        <h2 className="gbc-menu-heading">ゲーム</h2>
+        <button
+            type="button"
+            className="gbc-menu-item"
+            disabled={disabled}
+            onClick={onTogglePause}
+        >
+            {paused ? "▶ 再開" : "Ⅱ 一時停止"}
+        </button>
+    </section>
+);
 
 const formatStorage = ({ persisted, usageMB, quotaMB }: StorageStatus) => ({
     persisted:
@@ -36,7 +62,7 @@ const formatStorage = ({ persisted, usageMB, quotaMB }: StorageStatus) => ({
     usage: `${usageMB ?? "?"} MB / ${quotaMB ?? "?"} MB`,
 });
 
-/** メニューの中身: ROM の一覧と追加、操作の配置、セーブステートのファイル、保存の状態、アプリの版 */
+/** メニューの中身: 一時停止、ROM の一覧と追加、操作の配置、セーブステートのファイル、保存の状態、アプリの版 */
 export const RomMenu = ({
     roms,
     currentRomId,
@@ -52,10 +78,17 @@ export const RomMenu = ({
     onImportState,
     controlLayout,
     onSelectControlLayout,
+    paused,
+    onTogglePause,
 }: RomMenuProps) => {
     const storage = storageStatus && formatStorage(storageStatus);
     return (
         <>
+            <PauseMenu
+                paused={paused}
+                disabled={!gameActive}
+                onTogglePause={onTogglePause}
+            />
             <section className="gbc-menu-section">
                 <h2 className="gbc-menu-heading">ROM</h2>
                 {roms.length === 0 ? (

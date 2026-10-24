@@ -176,7 +176,21 @@
     letter-spacing: 0.05em;
 }
 .gbc-paused {
-    background: rgba(10, 8, 18, 0.55);
+    flex-direction: column;
+    gap: 6px;
+    width: 100%;
+    padding: 0;
+    border: 0;
+    /* 「タップで再開」が読めるよう、前（0.55）より少し暗く */
+    background: rgba(10, 8, 18, 0.7);
+    font: inherit;
+    font-size: 15px;
+    font-weight: 600;
+    touch-action: manipulation;
+}
+.gbc-paused-sub {
+    color: #c9c4d8;
+    font-size: 12px;
 }
 
 .gbc-strip {
@@ -220,6 +234,14 @@
 }
 .gbc-state-button:active:not(:disabled) {
     background: rgba(170, 140, 240, 0.34);
+}
+.gbc-speed-value {
+    /* 速さが変わっても幅が変わらないように（並びが動かないように） */
+    min-width: 1.9em;
+    font-variant-numeric: tabular-nums;
+}
+.gbc-speed-button[data-fast] {
+    color: #d6ccf5;
 }
 .gbc-sub-button svg {
     width: 18px;
