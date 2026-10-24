@@ -100,7 +100,7 @@ export const releasePuniPointer = (element: HTMLElement, pointerId: number) => {
 };
 
 /**
- * ぷにコンの見た目（触っていないときの目印と、触っている間の中心・伸び・指の丸）。
+ * ぷにコンの見た目（いつも出ている目印と、触っている間の中心・伸び・指の丸）。
  * 親の要素に .gbc-puni を付ける。data-puni-pointer がある間だけ中心・伸び・指の丸が出る。
  */
 export const PuniVisual = ({

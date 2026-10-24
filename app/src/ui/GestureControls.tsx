@@ -85,28 +85,14 @@ const useGestures = (
             };
         };
 
+        // 見た目に出すのは、なぞっている間のぷにコンの丸だけ。タップ・長押しでは何も出さない
+        // （連打で画面が明滅しないように。A・B が入ったことはゲームの画面で分かる）
         const showMode = () => {
-            if (primary) {
-                element.dataset.gesture = primary.mode;
-                element.style.setProperty("--gesture-x", `${primary.x}px`);
-                element.style.setProperty("--gesture-y", `${primary.y}px`);
-            } else {
-                delete element.dataset.gesture;
-            }
             if (primary?.mode === "drag") {
                 element.dataset.puniPointer = String(primary.id);
             } else {
                 delete element.dataset.puniPointer;
             }
-        };
-
-        const showTap = (x: number, y: number) => {
-            // 同じ属性を付け直してもアニメーションは始め直さないので、一度外して描き直させる
-            delete element.dataset.tap;
-            void element.offsetWidth;
-            element.style.setProperty("--tap-x", `${x}px`);
-            element.style.setProperty("--tap-y", `${y}px`);
-            element.dataset.tap = "";
         };
 
         const tap = () => {
@@ -158,7 +144,6 @@ const useGestures = (
                     if (primary?.id !== id || primary.mode !== "pending")
                         return;
                     primary.mode = "hold";
-                    showMode();
                     update();
                 }, LONG_PRESS_MS);
             }
@@ -191,13 +176,9 @@ const useGestures = (
         const endPrimary = (tapped: boolean) => {
             if (!primary) return;
             window.clearTimeout(primary.timer);
-            const { x, y } = primary;
             primary = undefined;
             showMode();
-            if (tapped) {
-                showTap(x, y);
-                tap();
-            }
+            if (tapped) tap();
         };
 
         const handleUp = (event: PointerEvent) => {
@@ -311,26 +292,6 @@ export const GestureControls = ({
                         <li key={hint}>{hint}</li>
                     ))}
                 </ul>
-                <span className="gbc-gesture-ring" aria-hidden="true">
-                    B
-                </span>
-                <span className="gbc-gesture-tap" aria-hidden="true">
-                    A
-                </span>
-                <span
-                    className="gbc-gesture-badge"
-                    data-on={pressed.has("A") || undefined}
-                    aria-hidden="true"
-                >
-                    A
-                </span>
-                <span
-                    className="gbc-gesture-badge gbc-gesture-badge-b"
-                    data-on={pressed.has("B") || undefined}
-                    aria-hidden="true"
-                >
-                    B
-                </span>
             </div>
             <CornerStartSelect {...handlers} />
         </div>

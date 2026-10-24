@@ -78,8 +78,9 @@ export type SaveSlot =
     // 読めなかった（ロードを押せば改めて読む）
     | { readonly kind: "unreadable" };
 
-// 「セーブしました」などを出しておく時間
+// 「セーブしました」などを出しておく時間と、そのうち最後の消えていく時間（gbc.css の .gbc-flash[data-leaving] と同じ）
 const FLASH_MS = 1500;
+const FLASH_FADE_MS = 375;
 
 const PNG_TYPE = "image/png";
 
@@ -180,10 +181,10 @@ const useRomSession = () => {
         readonly romId: string;
         readonly slot: SaveSlot;
     } | null>(null);
-    // 一瞬だけ出す知らせ（「セーブしました」など）。key は同じ文言を続けて出したときに出し直すため
+    // 一瞬だけ出す知らせ（「セーブしました」など）。leaving は消えていくところ
     const [flash, setFlash] = useState<{
-        readonly key: number;
         readonly message: string;
+        readonly leaving: boolean;
     } | null>(null);
     const flashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     // 枠への書き込み・読み出しを 1 本の列に並べる。連打しても押した順に書き、ロードは手前のセーブの完了を待つ
@@ -449,12 +450,17 @@ const useRomSession = () => {
         );
 
     const showFlash = (message: string): void => {
+        // 出ている間に続けて出すときは、出し直さず（フェードをやり直さず）文言と時間だけ変える。
+        // 連打で知らせが明滅しないように
         if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
-        setFlash(current => ({ key: (current?.key ?? 0) + 1, message }));
+        setFlash({ message, leaving: false });
         flashTimerRef.current = setTimeout(() => {
-            flashTimerRef.current = null;
-            setFlash(null);
-        }, FLASH_MS);
+            setFlash({ message, leaving: true });
+            flashTimerRef.current = setTimeout(() => {
+                flashTimerRef.current = null;
+                setFlash(null);
+            }, FLASH_FADE_MS);
+        }, FLASH_MS - FLASH_FADE_MS);
     };
 
     // 枠の処理を列の最後に足す（前の処理が失敗しても続ける）

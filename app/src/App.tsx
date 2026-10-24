@@ -330,8 +330,10 @@ const App = () => {
                             />
                             {session.flash && (
                                 <div
-                                    key={session.flash.key}
                                     className="gbc-flash"
+                                    data-leaving={
+                                        session.flash.leaving || undefined
+                                    }
                                     role="status"
                                 >
                                     {session.flash.message}
