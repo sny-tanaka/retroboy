@@ -4,6 +4,9 @@ import { type CSSProperties, type ReactNode, useEffect, useRef } from "react";
 
 import { ActionButtons } from "./ActionButtons";
 import type { GbButtonHandlers } from "./buttons";
+import type { ControlLayout } from "./controlLayout";
+import { type GestureBTrigger, GestureControls } from "./GestureControls";
+import { OneHandCluster } from "./OneHandCluster";
 import { PuniPad } from "./PuniPad";
 import { StartSelect } from "./StartSelect";
 import { useScreenSize } from "./useScreenSize";
@@ -22,6 +25,10 @@ const RESERVE = {
 };
 
 export interface GbcBodyProps extends GbButtonHandlers {
+    /** 操作部の配置。既定は twohand */
+    readonly layout?: ControlLayout;
+    /** 片手 B の B の入れ方（プレビューで比べる用）。既定は both（長押しともう 1 本の指の両方） */
+    readonly gestureBTrigger?: GestureBTrigger;
     /** ゲーム画面。160x144 の canvas を入れる。大きさは枠のほうで合わせる */
     readonly screen: ReactNode;
     /** 画面の上に重ねるもの（「タップして開始」など） */
@@ -94,6 +101,8 @@ const useBlockIosGestures = () => {
 
 /** ゲームボーイカラー風の本体。ゲームの処理には繋がず、押した・離したを props で返すだけ。 */
 export const GbcBody = ({
+    layout = "twohand",
+    gestureBTrigger,
     screen,
     screenOverlay,
     powerOn,
@@ -199,19 +208,30 @@ export const GbcBody = ({
                     </div>
                 </section>
 
-                <section className="gbc-controls">
+                <section className="gbc-controls" data-layout={layout}>
                     <span className="gbc-engraving" aria-hidden="true">
                         Retro Boy Snap
                     </span>
-                    <div className="gbc-puni-area">
-                        <PuniPad {...handlers} />
-                    </div>
-                    <div className="gbc-ab-area">
-                        <ActionButtons {...handlers} />
-                    </div>
-                    <div className="gbc-start-select-area">
-                        <StartSelect {...handlers} />
-                    </div>
+                    {layout === "onehand-a" ? (
+                        <OneHandCluster {...handlers} />
+                    ) : layout === "onehand-b" ? (
+                        <GestureControls
+                            {...handlers}
+                            bTrigger={gestureBTrigger}
+                        />
+                    ) : (
+                        <>
+                            <div className="gbc-puni-area">
+                                <PuniPad {...handlers} />
+                            </div>
+                            <div className="gbc-ab-area">
+                                <ActionButtons {...handlers} />
+                            </div>
+                            <div className="gbc-start-select-area">
+                                <StartSelect {...handlers} />
+                            </div>
+                        </>
+                    )}
                 </section>
             </div>
         </div>

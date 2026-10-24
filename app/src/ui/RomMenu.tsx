@@ -1,5 +1,7 @@
 import type { RomSummary } from "../storage/romDb";
 import type { StorageStatus } from "../storage/storageStatus";
+import type { ControlLayout } from "./controlLayout";
+import { ControlLayoutMenu } from "./ControlLayoutMenu";
 
 interface RomMenuProps {
     readonly roms: readonly RomSummary[];
@@ -19,6 +21,9 @@ interface RomMenuProps {
     readonly onAddRom: () => void;
     readonly onExportState: () => void;
     readonly onImportState: () => void;
+    /** 操作の配置（両手・片手 A・片手 B） */
+    readonly controlLayout: ControlLayout;
+    readonly onSelectControlLayout: (layout: ControlLayout) => void;
 }
 
 const formatStorage = ({ persisted, usageMB, quotaMB }: StorageStatus) => ({
@@ -31,7 +36,7 @@ const formatStorage = ({ persisted, usageMB, quotaMB }: StorageStatus) => ({
     usage: `${usageMB ?? "?"} MB / ${quotaMB ?? "?"} MB`,
 });
 
-/** メニューの中身: ROM の一覧と追加、セーブステートのファイル、保存の状態、アプリの版 */
+/** メニューの中身: ROM の一覧と追加、操作の配置、セーブステートのファイル、保存の状態、アプリの版 */
 export const RomMenu = ({
     roms,
     currentRomId,
@@ -45,6 +50,8 @@ export const RomMenu = ({
     onAddRom,
     onExportState,
     onImportState,
+    controlLayout,
+    onSelectControlLayout,
 }: RomMenuProps) => {
     const storage = storageStatus && formatStorage(storageStatus);
     return (
@@ -90,6 +97,11 @@ export const RomMenu = ({
                     ＋ ROM を追加
                 </button>
             </section>
+
+            <ControlLayoutMenu
+                value={controlLayout}
+                onChange={onSelectControlLayout}
+            />
 
             <section className="gbc-menu-section">
                 <h2 className="gbc-menu-heading">セーブステート（ファイル）</h2>

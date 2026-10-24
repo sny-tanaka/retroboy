@@ -26,6 +26,7 @@ import {
 import useRomSession, { type SessionStatus } from "./session/useRomSession";
 import type { GbButton } from "./ui/buttons";
 import { LoadStateConfirm } from "./ui/ConfirmDialog";
+import { type ControlLayout, useControlLayout } from "./ui/controlLayout";
 import { GbcBody } from "./ui/GbcBody";
 import { MenuSheet } from "./ui/MenuSheet";
 import { RomMenu } from "./ui/RomMenu";
@@ -295,9 +296,19 @@ const App = () => {
         if (playing) pressedRef.current.forEach(button => pressKey(button));
     }, [playing]);
 
+    // 操作の配置。切り替えたら、押している扱いのボタンを全部離す（前の配置の部品が消えても押しっぱなしにしない）
+    const [controlLayout, setControlLayout] = useControlLayout();
+    const selectControlLayout = (layout: ControlLayout): void => {
+        if (layout === controlLayout) return;
+        pressedRef.current.forEach(button => releaseKey(button));
+        pressedRef.current.clear();
+        setControlLayout(layout);
+    };
+
     return (
         <>
             <GbcBody
+                layout={controlLayout}
                 screen={
                     <GameScreen
                         canvasRef={canvasRef}
@@ -390,6 +401,8 @@ const App = () => {
                         openLoadConfirm("file");
                         closeMenu();
                     }}
+                    controlLayout={controlLayout}
+                    onSelectControlLayout={selectControlLayout}
                 />
             </MenuSheet>
             <LoadStateConfirm
