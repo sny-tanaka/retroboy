@@ -8,10 +8,18 @@
 //   倍速（speed）を足した。倍速のときは 1 バッファを timeStretch.ts で高さを変えずに 1/speed の長さに
 //   縮めて等速で鳴らし、次の再生の予定をその長さだけ進める（×1 では素通し）。遅れの合わせ直しは実時間で
 //   見るので、追いつかなければ速さが落ちるだけ。
+//   1 回の setTimeout で step を何回か続けられるようにした（下の「予約の決め方」）。倍速では 1 バッファが
+//   短くなり、1 回の setTimeout に 1 回の step では、ブラウザの setTimeout の最短の待ち（WebKit では 0 を
+//   頼んでも 7ms ほど）に間に合わず、音が途切れ途切れになっていた。
 //
 // エミュレーターの進行は音で駆動する: stepUntilNextAudioBuffer() が 1 バッファ分進めて
-// window.playAudioSamples を呼び、その再生直前のタイミングで次の step を予約する。
-import { type RefObject, useCallback, useEffect, useRef } from "react";
+// window.playAudioSamples を呼び、そこで再生を予約する。
+//
+// 予約の決め方: 1 回起きるたびに、予約した音の終わりが今より LEAD 先になるまで step を続け、予約した音の
+// 終わりが LEAD 先になる頃にまた起きる。LEAD は GAP_BEFORE_SAMPLE_PLAY + ×1 の 1 バッファの長さ。
+// ×1 では毎回ちょうど 1 回の step になり、本家（再生開始の 15ms 前に次の step）と同じ間隔になる。
+// 倍速では 1 回に 1〜2 回の step になり、先にためておく音の長さは ×1 と同じ。
+import { type RefObject, useEffect, useRef } from "react";
 
 import { stepUntilNextAudioBuffer } from "../core/retroboyCore";
 import { TimeStretcher } from "./timeStretch";
@@ -19,6 +27,8 @@ import { TimeStretcher } from "./timeStretch";
 const GAP_BEFORE_SAMPLE_PLAY = 15;
 // 秒。これ以上遅れたら、遅れた分の音とゲームの進みは捨てる。少しの遅れは、音が途切れないよう追いつく
 const MAX_LAG = 0.1;
+// 1 回起きたときに続ける step の上限（倍速に切り替えた直後や、遅れを合わせ直した直後に 3〜5 回になる）
+const MAX_STEPS_PER_WAKE = 8;
 
 const useAudioSync = (
     playing: boolean,
@@ -36,6 +46,8 @@ const useAudioSync = (
     const stretcherRef = useRef<TimeStretcher | null>(null);
 
     const nextPlayTimeRef = useRef<number>(0);
+    // 秒。予約した音の終わりを今よりどれだけ先にしておくか。×1 の 1 バッファの長さで決まる
+    const leadRef = useRef<number>(0);
     const stepTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(
         undefined,
     );
@@ -53,14 +65,6 @@ const useAudioSync = (
             resetGame();
         }
     };
-
-    const step = useCallback(() => {
-        if (scheduledResetRef.current) {
-            resetGame();
-        } else if (playing) {
-            stepUntilNextAudioBuffer();
-        }
-    }, [playing]);
 
     useEffect(() => {
         if (playing && audioContextRef.current) {
@@ -124,13 +128,9 @@ const useAudioSync = (
                     bufferSource.start(nextPlayTimeRef.current);
                 }
 
-                const waitTime =
-                    (nextPlayTimeRef.current - audioContext.currentTime) * 1000;
-
-                stepTimerRef.current = setTimeout(
-                    step,
-                    waitTime - GAP_BEFORE_SAMPLE_PLAY,
-                );
+                leadRef.current =
+                    GAP_BEFORE_SAMPLE_PLAY / 1000 +
+                    leftAudioSamples.length / audioContext.sampleRate;
 
                 nextPlayTimeRef.current = nextPlayTimeRef.current
                     ? nextPlayTimeRef.current + duration
@@ -141,6 +141,29 @@ const useAudioSync = (
 
     useEffect(() => {
         if (!playing) return;
+        const step = (): void => {
+            if (scheduledResetRef.current) {
+                resetGame();
+                return;
+            }
+            const audioContext = audioContextRef.current;
+            if (!audioContext) return;
+            for (let i = 0; i < MAX_STEPS_PER_WAKE; i++) {
+                stepUntilNextAudioBuffer();
+                if (
+                    nextPlayTimeRef.current - audioContext.currentTime >=
+                    leadRef.current
+                ) {
+                    break;
+                }
+            }
+            const waitTime =
+                (nextPlayTimeRef.current -
+                    audioContext.currentTime -
+                    leadRef.current) *
+                1000;
+            stepTimerRef.current = setTimeout(step, waitTime);
+        };
         step();
         // 一時停止・アンマウントで予約済みの step を消す。残すと再開後に古いループも走り続ける
         return () => {
