@@ -69,12 +69,38 @@ export type SaveSlot =
     // 端末から読んでいる
     | { readonly kind: "checking" }
     | { readonly kind: "empty" }
-    | { readonly kind: "saved"; readonly savedAt: number }
+    | {
+          readonly kind: "saved";
+          readonly savedAt: number;
+          // セーブしたときのゲーム画面（PNG）。画像を足す前のセーブには無い
+          readonly screenshot?: Blob;
+      }
     // 読めなかった（ロードを押せば改めて読む）
     | { readonly kind: "unreadable" };
 
 // 「セーブしました」などを出しておく時間
 const FLASH_MS = 1500;
+
+const PNG_TYPE = "image/png";
+
+/**
+ * ゲーム画面（canvas）を PNG にする。toBlob は呼んだ時点の絵を写すので、押した瞬間の画面になる。
+ * 作れなかったら null（画像なしでセーブする）
+ */
+const captureScreen = (
+    canvas: HTMLCanvasElement | null | undefined,
+): Promise<Blob | null> =>
+    new Promise(resolve => {
+        if (!canvas) {
+            resolve(null);
+            return;
+        }
+        try {
+            canvas.toBlob(resolve, PNG_TYPE);
+        } catch {
+            resolve(null);
+        }
+    });
 
 type GameBoyMode = "DMG" | "CGB";
 
@@ -349,7 +375,15 @@ const useRomSession = () => {
                 setSlotFor(
                     romId,
                     record
-                        ? { kind: "saved", savedAt: record.savedAt }
+                        ? {
+                              kind: "saved",
+                              savedAt: record.savedAt,
+                              screenshot:
+                                  record.screenshot &&
+                                  new Blob([record.screenshot], {
+                                      type: PNG_TYPE,
+                                  }),
+                          }
                         : { kind: "empty" },
                 );
             })
@@ -430,8 +464,8 @@ const useRomSession = () => {
         return next;
     }
 
-    // 画面の「セーブ」。押した瞬間の状態を取り、ROM の枠に上書きする（ゲームは止めない）
-    const saveToSlot = (): void => {
+    // 画面の「セーブ」。押した瞬間の状態と画面（screen）を取り、ROM の枠に上書きする（ゲームは止めない）
+    const saveToSlot = (screen?: HTMLCanvasElement | null): void => {
         if (status.kind !== "running") return;
         const romId = status.rom.id;
         const captured = captureSaveState();
@@ -441,11 +475,20 @@ const useRomSession = () => {
             );
             return;
         }
-        void enqueueSlot(() => putSaveState(romId, captured.data)).then(
-            savedAt => {
+        const shot = captureScreen(screen);
+        void enqueueSlot(async () => {
+            // 画像を作れなくてもセーブはする（ロードの確認が日時だけになる）
+            const screenshot = (await shot) ?? undefined;
+            const bytes = await screenshot
+                ?.arrayBuffer()
+                .catch(() => undefined);
+            const savedAt = await putSaveState(romId, captured.data, bytes);
+            return { savedAt, screenshot: bytes && screenshot };
+        }).then(
+            ({ savedAt, screenshot }) => {
                 // 書き終わる前に ROM を切り替えていたら、枠の表示も知らせも出さない（切り替え先の枠は別に読む）
                 if (romId !== slotRomIdRef.current) return;
-                setSlotFor(romId, { kind: "saved", savedAt });
+                setSlotFor(romId, { kind: "saved", savedAt, screenshot });
                 showFlash("セーブしました");
             },
             (err: unknown) =>

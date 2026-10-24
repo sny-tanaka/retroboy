@@ -881,6 +881,21 @@
     font-size: 17px;
     font-weight: 700;
 }
+/* ロードの確認に出す、セーブしたときのゲーム画面。ドットをぼかさずに 1.5 倍で出す */
+.gbc-dialog-screenshot {
+    display: block;
+    width: 240px;
+    max-width: 100%;
+    height: auto;
+    aspect-ratio: 160 / 144;
+    margin: 4px auto 12px;
+    border-radius: 4px;
+    background: #000;
+    box-shadow:
+        0 0 0 6px #0e0d12,
+        0 0 0 7px rgba(190, 165, 235, 0.35);
+    image-rendering: pixelated;
+}
 .gbc-dialog-message {
     margin: 0 0 18px;
     font-size: 14px;

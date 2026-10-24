@@ -373,7 +373,7 @@ const App = () => {
                 gameActive={running}
                 inert={menuOpen || confirmingLoad !== null}
                 onTogglePause={togglePause}
-                onSaveState={session.saveToSlot}
+                onSaveState={() => session.saveToSlot(canvasRef.current)}
                 onLoadState={() => openLoadConfirm("slot")}
                 canLoadState={
                     session.slot.kind === "saved" ||
@@ -407,9 +407,9 @@ const App = () => {
             </MenuSheet>
             <LoadStateConfirm
                 open={confirmingLoad !== null}
-                savedAt={
+                slot={
                     confirmingLoad === "slot" && session.slot.kind === "saved"
-                        ? session.slot.savedAt
+                        ? session.slot
                         : undefined
                 }
                 onConfirm={() => {

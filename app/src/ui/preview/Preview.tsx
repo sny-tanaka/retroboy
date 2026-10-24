@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import type { GbButton } from "../buttons";
-import { LoadStateConfirm } from "../ConfirmDialog";
+import { LoadStateConfirm, type SavedSlotInfo } from "../ConfirmDialog";
 import { parseControlLayout, useControlLayout } from "../controlLayout";
 import { ControlLayoutMenu } from "../ControlLayoutMenu";
 import { GbcBody } from "../GbcBody";
@@ -116,6 +116,8 @@ export const Preview = () => {
     const [menuOpen, setMenuOpen] = useState(false);
     const [confirmingLoad, setConfirmingLoad] = useState(false);
     const [layout, setLayout] = useControlLayout(initialLayout);
+    // 「セーブ」を押したときの日時と画面（アプリと同じく、ロードの確認に出す）
+    const [saved, setSaved] = useState<SavedSlotInfo>();
 
     useEffect(() => {
         const context = canvasRef.current?.getContext("2d");
@@ -153,7 +155,16 @@ export const Preview = () => {
                     setPaused(prev => !prev);
                     setLastAction("PAUSE");
                 }}
-                onSaveState={() => setLastAction("SAVE STATE")}
+                onSaveState={() => {
+                    const savedAt = Date.now();
+                    canvasRef.current?.toBlob(screenshot =>
+                        setSaved({
+                            savedAt,
+                            screenshot: screenshot ?? undefined,
+                        }),
+                    );
+                    setLastAction("SAVE STATE");
+                }}
                 onLoadState={() => setConfirmingLoad(true)}
                 onOpenMenu={() => {
                     setMenuOpen(true);
@@ -169,6 +180,7 @@ export const Preview = () => {
             </MenuSheet>
             <LoadStateConfirm
                 open={confirmingLoad}
+                slot={saved}
                 onConfirm={() => {
                     setConfirmingLoad(false);
                     setLastAction("LOAD STATE");

@@ -25,6 +25,10 @@ export interface SaveStateRecord {
     readonly romId: string;
     readonly data: ArrayBuffer;
     readonly savedAt: number;
+    // セーブしたときのゲーム画面（160x144 の PNG のバイト列）。ロードの確認に出す。
+    // 足す前のセーブには無い。値に足すだけなので DB の版は上げない。
+    // Blob ではなく ArrayBuffer で持つ（古い iOS の Safari は IndexedDB の Blob で失敗することがあるため）
+    readonly screenshot?: ArrayBuffer;
 }
 
 interface SettingRecord {
@@ -290,7 +294,11 @@ export const setLastRomId = (id: string): Promise<void> =>
     });
 
 // 枠に保存する（上書き）。トランザクションの完了まで待ち、保存した日時を返す
-export const putSaveState = (romId: string, data: ArrayBuffer): Promise<number> =>
+export const putSaveState = (
+    romId: string,
+    data: ArrayBuffer,
+    screenshot?: ArrayBuffer,
+): Promise<number> =>
     wrap("セーブできませんでした。", async () => {
         const savedAt = Date.now();
         try {
@@ -304,6 +312,7 @@ export const putSaveState = (romId: string, data: ArrayBuffer): Promise<number> 
                     romId,
                     data,
                     savedAt,
+                    ...(screenshot && { screenshot }),
                 } satisfies SaveStateRecord);
                 return done;
             });
@@ -333,6 +342,17 @@ export const getSaveState = (romId: string): Promise<SaveStateRecord | null> =>
         if (!record) return null;
         if (!(record.data instanceof ArrayBuffer)) {
             throw new RomStorageError("セーブのデータが壊れています。");
+        }
+        // 画面の画像は無くてもロードできるので、おかしければ捨てるだけにする
+        if (
+            record.screenshot !== undefined &&
+            !(record.screenshot instanceof ArrayBuffer)
+        ) {
+            return {
+                romId: record.romId,
+                data: record.data,
+                savedAt: record.savedAt,
+            };
         }
         return record;
     });
