@@ -41,6 +41,8 @@ export interface GbcBodyProps extends GbButtonHandlers {
     readonly speed: number;
     /** 倍速ボタンを押した（×1 → ×1.5 → ×2 → ×1） */
     readonly onCycleSpeed: () => void;
+    /** 通信ケーブルでつないでいる間に、倍速ボタンの代わりに出す文言（「通信中 8ms」など）。この間は ×1 で押せない */
+    readonly linkLabel?: string;
     /** 「一時停止中」の画面を押した（再開する） */
     readonly onResume: () => void;
     readonly onSaveState: () => void;
@@ -52,6 +54,13 @@ export interface GbcBodyProps extends GbButtonHandlers {
     /** メニューや確認を開いている間は true にして、本体を操作できなくする（Tab でも届かない） */
     readonly inert?: boolean;
 }
+
+const LinkIcon = () => (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1" />
+        <path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" />
+    </svg>
+);
 
 const MenuIcon = () => (
     <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -112,6 +121,7 @@ export const GbcBody = ({
     paused,
     speed,
     onCycleSpeed,
+    linkLabel,
     onResume,
     onSaveState,
     onLoadState,
@@ -188,17 +198,30 @@ export const GbcBody = ({
                             <MenuIcon />
                             メニュー
                         </button>
-                        <button
-                            type="button"
-                            className="gbc-sub-button gbc-speed-button"
-                            onClick={onCycleSpeed}
-                            data-fast={speed !== 1 || undefined}
-                            aria-label={`速さ ×${speed}（押すと切り替え）`}
-                            disabled={!gameActive}
-                        >
-                            <FastForwardIcon />
-                            <span className="gbc-speed-value">×{speed}</span>
-                        </button>
+                        {linkLabel ? (
+                            <span
+                                className="gbc-sub-button gbc-link-label"
+                                role="status"
+                                aria-label={`${linkLabel}（通信中は ×1）`}
+                            >
+                                <LinkIcon />
+                                {linkLabel}
+                            </span>
+                        ) : (
+                            <button
+                                type="button"
+                                className="gbc-sub-button gbc-speed-button"
+                                onClick={onCycleSpeed}
+                                data-fast={speed !== 1 || undefined}
+                                aria-label={`速さ ×${speed}（押すと切り替え）`}
+                                disabled={!gameActive}
+                            >
+                                <FastForwardIcon />
+                                <span className="gbc-speed-value">
+                                    ×{speed}
+                                </span>
+                            </button>
+                        )}
                         <span className="gbc-strip-spacer" />
                         <button
                             type="button"

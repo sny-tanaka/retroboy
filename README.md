@@ -6,6 +6,7 @@
   - `core/patches/` … 本家への変更。いまは通信ケーブルのためのもの（serial の速さの直し・通信の口・WASM の API）。設計は `docs/link-cable-design.md`。
   - `core/tests/link.rs` … 通信テスト ROM で 2 台のエミュレーターを直結する試験。
 - `app/` … Vite + React + TypeScript のアプリ。本家 `frontends/web` から移したつなぎのコードは `app/src/emulator/`。
+  - `app/src/link/` … 通信ケーブル。送り合うメッセージ（`protocol.ts`）、道（`transport.ts`）、2 台の進みを合わせる部分（`linkSession.ts`）、いまのつながり（`linkStore.ts`）。下の「通信ケーブル（試験中）」。
   - `app/src/storage/` … ROM を端末内（IndexedDB）に保存する処理と、保存領域の永続化（`navigator.storage.persist()`）。
   - `app/src/session/useRomSession.ts` … 画面の状態とロジック（ROM の追加・自動読み込み・起動・停止）。`App.tsx` は見た目だけ。
   - `app/public/` … Web App Manifest とアイコン。`app/sw/sw.template.js` が Service Worker の本体で、`app/scripts/generate-sw.mjs` がビルド後に `dist/sw.js` を作る。
@@ -199,7 +200,7 @@ npm run deploy     # npm run check（WASM のビルド・型チェック・lint�
 ./scripts/test-core.sh               # 本家の単体試験と 2 台直結の試験
 ```
 
-`core/upstream/` にコミットしていない変更や、パッチに書き出していないコミットがあると、`scripts/prepare-core.sh` は消さずに止まる（書き出すか、`core/upstream/` を消してからやり直す）。本家のコードの書き方（コメントは少なく英語、`mod` はファイルの最後）は本家の `CLAUDE.md` に合わせる。
+`core/upstream/` にコミットしていない変更があると、`scripts/prepare-core.sh` は消さずに止まる（コミットして書き出すか、`core/upstream/` を消してからやり直す）。作業ツリーがきれいなら、前に当てた状態と違っていても（途中で止まった・パッチに書き出していないコミットがある）作り直す。そのときは前の HEAD を `refs/retroboy-snap/previous-head` に残して知らせるので、書き出し忘れたコミットは `git -C core/upstream log refs/retroboy-snap/previous-head` で取り出せる。本家のコードの書き方（コメントは少なく英語、`mod` はファイルの最後）は本家の `CLAUDE.md` に合わせる。
 
 ## 本家の版を上げるとき
 
@@ -233,6 +234,16 @@ cargo update --manifest-path core/Cargo.toml   # 本家の依存が変わった�
 | SELECT / START | 高速クロック / CPU の倍速モード（どちらも GBC のみ） |
 
 画面には、最後に送った・受け取ったバイト（SENT / RECV）、並びが合った数と合わなかった数（OK / ERR）、子機で 0.5 秒受け取れなかった回数（TOUT）、1 秒に受け渡したバイト数（BPS）が出る。つないでいないときに親機にすると、RECV が FF のまま ERR が増え続ける（実機と同じ）。アプリで試すときは、ほかの ROM と同じく「ROM を追加」で選ぶ（ヘッダで GBC 対応にしてあるので、アプリでは GBC として動く）。
+
+## 通信ケーブル（試験中）
+
+同じ Wi-Fi の 2 台で交換・対戦するための通信ケーブル（設計は `docs/link-cable-design.md`）。2 台の iPhone をつなぐ画面（WebRTC と QR）はまだ無く、いまは同じブラウザの 2 つの画面どうしでだけつなげる。
+
+- `npm run dev` で `/link-test.html` を開くと、アプリが 2 つ横に並び、通信ケーブルでつながる。それぞれ「タップして開始」を押す。テスト ROM（上）なら、片方で B（子機）、もう片方で A（親機）を押すと受け渡しが始まる。
+- URL に `?linkDelay=10&linkJitter=5` を付けると、送るものを片道 10ms 遅らせ、さらに 0〜5ms の揺れを足す（同じ Wi-Fi の遅れのまね）。`&linkWindow=16` で、相手より先に進んでよい時間（既定 32ms）を変えられる。
+- アプリの URL に直接 `?link=tab`（`&room=<名前>` で組を分ける）を付けても、同じ room の別のタブ・窓とつながる。ただし裏に回ったタブはブラウザがタイマーを間引くので、とても遅くなる。窓を 2 つ横に並べるか、`/link-test.html` を使う。
+- つないでいる間は、倍速ボタンの所に「通信中 8ms」（往復の時間）が出て ×1 に固定になり、ロード（画面の「ロード」とファイルからの読み込み）はできない。相手を待って 0.3 秒止まると「相手を待っています…」（相手が一時停止中なら「相手が一時停止しています…」、相手のゲームが始まっていなければ「相手のゲームが始まるのを待っています…」）、相手から 5 秒なにも届かないと「相手から応答がありません」と「通信を切る」が出る。メニューの「通信ケーブル」で状態を見て、通信を切れる。切ってもゲームは続き、つながっていない状態に戻る。
+- 開発時は、各アプリの `window.__retroboyLink()` で、コアの時刻・止まった回数と時間・つながりの状態を読める（`/link-test.html` で速さを測るのに使った）。
 
 ## ライセンス
 

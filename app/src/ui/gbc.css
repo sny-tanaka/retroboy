@@ -243,6 +243,12 @@
 .gbc-speed-button[data-fast] {
     color: #d6ccf5;
 }
+/* 通信ケーブルでつないでいる間に、倍速ボタンの代わりに出す「通信中 8ms」。押せない */
+.gbc-link-label {
+    color: #9fe3c0;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
 .gbc-sub-button svg {
     width: 18px;
     height: 18px;
@@ -955,6 +961,22 @@
 }
 .gbc-update-notice button:first-of-type {
     background: #7c5cd6;
+}
+
+/* 通信ケーブルで相手を待っている間に、画面の上に出す。押せる物は無いので操作を邪魔しない */
+.gbc-link-waiting {
+    position: absolute;
+    left: 50%;
+    top: 8px;
+    transform: translateX(-50%);
+    padding: 6px 14px;
+    border-radius: 999px;
+    background: rgba(29, 27, 36, 0.9);
+    box-shadow: inset 0 0 0 1px rgba(159, 227, 192, 0.45);
+    color: #d8f5e6;
+    font-size: 12px;
+    white-space: nowrap;
+    pointer-events: none;
 }
 
 /* ---- メニューの中身 ---- */

@@ -11,6 +11,9 @@
 //   1 回の setTimeout で step を何回か続けられるようにした（下の「予約の決め方」）。倍速では 1 バッファが
 //   短くなり、1 回の setTimeout に 1 回の step では、ブラウザの setTimeout の最短の待ち（WebKit では 0 を
 //   頼んでも 7ms ほど）に間に合わず、音が途切れ途切れになっていた。
+//   通信ケーブル（link/linkSession.ts）でつないでいる間は、stepUntilNextAudioBuffer の代わりに link.step() を
+//   回して相手と進みを合わせる。相手を待つときは setTimeout を予約せずに抜け、相手のメッセージが届いたら
+//   （link.onWake）続きを走らせる。その間の音は途切れる。
 //
 // エミュレーターの進行は音で駆動する: stepUntilNextAudioBuffer() が 1 バッファ分進めて
 // window.playAudioSamples を呼び、そこで再生を予約する。
@@ -22,6 +25,7 @@
 import { type RefObject, useEffect, useRef } from "react";
 
 import { stepUntilNextAudioBuffer } from "../core/retroboyCore";
+import { getLinkSession } from "../link/linkStore";
 import { TimeStretcher } from "./timeStretch";
 
 const GAP_BEFORE_SAMPLE_PLAY = 15;
@@ -29,6 +33,9 @@ const GAP_BEFORE_SAMPLE_PLAY = 15;
 const MAX_LAG = 0.1;
 // 1 回起きたときに続ける step の上限（倍速に切り替えた直後や、遅れを合わせ直した直後に 3〜5 回になる）
 const MAX_STEPS_PER_WAKE = 8;
+// 通信ケーブルでつないでいる間に、1 回起きたときに呼ぶ link.step() の上限。1 回は 4ms（ゲーム内）ほどで区切るので
+// 1 バッファに 3〜4 回。相手を待ったあとの追いつきでは、×1 で 8 バッファ分ほどまで
+const MAX_LINK_STEPS_PER_WAKE = 32;
 
 const useAudioSync = (
     playing: boolean,
@@ -141,6 +148,17 @@ const useAudioSync = (
 
     useEffect(() => {
         if (!playing) return;
+        // 通信ケーブルで相手を待って止まっている（setTimeout を予約していない）
+        let waitingForPeer = false;
+        const leadReached = (audioContext: AudioContext): boolean =>
+            nextPlayTimeRef.current - audioContext.currentTime >=
+            leadRef.current;
+        // 相手のメッセージが届いた・つながりが切れた。止まっていたときだけ続きを走らせる（ループを 2 本にしない）
+        const wake = (): void => {
+            if (!waitingForPeer) return;
+            waitingForPeer = false;
+            step();
+        };
         const step = (): void => {
             if (scheduledResetRef.current) {
                 resetGame();
@@ -148,13 +166,25 @@ const useAudioSync = (
             }
             const audioContext = audioContextRef.current;
             if (!audioContext) return;
-            for (let i = 0; i < MAX_STEPS_PER_WAKE; i++) {
-                stepUntilNextAudioBuffer();
-                if (
-                    nextPlayTimeRef.current - audioContext.currentTime >=
-                    leadRef.current
-                ) {
-                    break;
+            const link = getLinkSession();
+            if (link?.stepping) {
+                // 通信ケーブルでつないでいる間は、相手との進みを合わせながら少しずつ進める（link/linkSession.ts）
+                link.onWake = wake;
+                for (let i = 0; i < MAX_LINK_STEPS_PER_WAKE; i++) {
+                    const outcome = link.step();
+                    if (outcome === "stalled") {
+                        // 相手を待つ。音はその分だけ途切れる
+                        waitingForPeer = true;
+                        return;
+                    }
+                    if (outcome === "audio" && leadReached(audioContext)) {
+                        break;
+                    }
+                }
+            } else {
+                for (let i = 0; i < MAX_STEPS_PER_WAKE; i++) {
+                    stepUntilNextAudioBuffer();
+                    if (leadReached(audioContext)) break;
                 }
             }
             const waitTime =
@@ -169,6 +199,9 @@ const useAudioSync = (
         return () => {
             clearTimeout(stepTimerRef.current);
             stepTimerRef.current = undefined;
+            waitingForPeer = false;
+            const link = getLinkSession();
+            if (link?.onWake === wake) link.onWake = null;
         };
     }, [playing]);
 

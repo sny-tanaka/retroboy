@@ -3,8 +3,9 @@
 # git am で当てる（core/Cargo.toml はこの core/upstream/ を path 依存で使う）。core/upstream/ は git に入れない。
 # 当て終えた状態（本家のコミット・パッチの中身・できたコミット）を core/upstream/.git/retroboy-snap-stamp に
 # 覚え、変わっていなければ何もしない（ファイルを触らないので、Cargo が本家を作り直さない）。
-# core/upstream/ に書き出していない変更（コミットしていない変更・パッチにしていないコミット）があれば、
-# 消さずに止まる。パッチを直す手順は README の「本家のコードに手を入れる」。
+# core/upstream/ にコミットしていない変更があれば、消さずに止まる。作業ツリーがきれいなら、前に当てた状態と
+# 違っていても作り直す（前の HEAD は refs/retroboy-snap/previous-head に残す）。パッチを直す手順は README の
+# 「本家のコードに手を入れる」。
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -27,20 +28,30 @@ fi
 head="$(git -C "$UPSTREAM" rev-parse -q --verify HEAD || true)"
 dirty="$(git -C "$UPSTREAM" status --porcelain)"
 
+stamp_head=""
 if [ -f "$STAMP" ]; then
   read -r stamp_rev stamp_hash stamp_head < "$STAMP"
   if [ -z "$dirty" ] && [ "$head" = "$stamp_head" ] && [ "$stamp_rev $stamp_hash" = "$want" ]; then
     exit 0
   fi
-  if [ -n "$dirty" ] || [ "$head" != "$stamp_head" ]; then
-    echo "core/upstream/ にパッチへ書き出していない変更があります。" >&2
-    echo "残すなら scripts/export-core-patches.sh で core/patches/ に書き出し、捨てるなら core/upstream/ を消してから、もう一度実行してください。" >&2
-    exit 1
-  fi
-elif [ -n "$head" ]; then
-  echo "core/upstream/ が scripts/prepare-core.sh で作ったものではありません。core/upstream/ を消してから、もう一度実行してください。" >&2
+fi
+
+if [ -n "$dirty" ]; then
+  echo "core/upstream/ にコミットしていない変更があります。" >&2
+  echo "残すならコミットして scripts/export-core-patches.sh で core/patches/ に書き出し、捨てるなら core/upstream/ を消してから、もう一度実行してください。" >&2
   exit 1
 fi
+
+# 作業ツリーがきれいなら、印がずれていても（前の実行が途中で止まった・印が無い・パッチにしていないコミットがある）
+# 作り直す。パッチにしていないコミットかもしれないので、前の HEAD は refs/retroboy-snap/previous-head に残して知らせる
+if [ -n "$head" ] && [ "$head" != "$stamp_head" ] && [ "$head" != "$(git -C "$UPSTREAM" rev-parse -q --verify "$REV^{commit}" || true)" ]; then
+  git -C "$UPSTREAM" update-ref refs/retroboy-snap/previous-head "$head"
+  echo "core/upstream/ の HEAD（${head:0:7}）が前に当てた状態と違うので、作り直します。" >&2
+  echo "パッチにしていないコミットだったなら git -C core/upstream log refs/retroboy-snap/previous-head で取り出せます。" >&2
+fi
+
+# 途中で止まっても前の印が残らないよう、当て直す前に消す（当て終えたら書き直す）
+rm -f "$STAMP"
 
 if ! git -C "$UPSTREAM" cat-file -e "$REV^{commit}" 2>/dev/null; then
   git -C "$UPSTREAM" fetch -q --depth 1 origin "$REV"

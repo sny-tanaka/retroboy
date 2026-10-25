@@ -6,7 +6,10 @@ import init from "./core/retroboyCore";
 import registerCartridgeEffects, {
     setWasmMemory,
 } from "./emulator/cartridgeEffects";
-import registerServiceWorker from "./pwa/registerServiceWorker";
+import { startLinkFromUrl } from "./link/linkStore";
+import registerServiceWorker, {
+    APP_VERSION,
+} from "./pwa/registerServiceWorker";
 
 registerCartridgeEffects();
 registerServiceWorker();
@@ -18,6 +21,8 @@ root.render(<p>読み込み中…</p>);
 init().then(
     wasm => {
         setWasmMemory(wasm.memory);
+        // 試験用の ?link=tab（同じブラウザのタブどうしの通信ケーブル）
+        startLinkFromUrl(APP_VERSION);
         root.render(
             <StrictMode>
                 <App />

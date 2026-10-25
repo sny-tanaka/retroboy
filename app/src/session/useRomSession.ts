@@ -28,6 +28,11 @@ import {
 import useAudioSync from "../emulator/useAudioSync";
 import { useKeyListeners } from "../emulator/useKeyListeners";
 import {
+    setLocalGame,
+    setLocalPlaying,
+    useLinkStatus,
+} from "../link/linkStore";
+import {
     getLastRomId,
     getSaveState,
     importRom,
@@ -128,8 +133,9 @@ const loadIntoCore = (
             error: "ROM のヘッダが壊れているか、Game Boy の ROM ではありません。",
         };
     }
-    // 本家と同じく、ROM を読む前に必ずエミュレーターを作り直す
+    // 本家と同じく、ROM を読む前に必ずエミュレーターを作り直す。通信ケーブルからも外す
     flushPendingSaves();
+    setLocalGame(null);
     resetEmulator();
     // initializeEmulator の中でセーブ RAM が読まれるので、その前にキーを ROM の ID にする
     setActiveRomId(rom.id);
@@ -219,17 +225,38 @@ const useRomSession = () => {
 
     useKeyListeners(playing);
 
-    // 倍速。覚えない（起動時は ×1）。ROM を始めるとき・止めたときにも ×1 に戻す
-    const [speed, setSpeed] = useState<GameSpeed>(1);
-    const cycleSpeed = (): void =>
+    // 通信ケーブル（link/）。つないでいる間は ×1 に固定し、ロードできなくする（docs/link-cable-design.md 2.3・3.4）
+    const link = useLinkStatus();
+    const linked = link?.phase.kind === "open";
+    // 非同期の処理の終わりで、いまつないでいるかを見る
+    const linkedRef = useRef(linked);
+    useEffect(() => {
+        linkedRef.current = linked;
+    }, [linked]);
+    useEffect(() => setLocalPlaying(playing), [playing]);
+
+    // 倍速。覚えない（起動時は ×1）。ROM を始めるとき・止めたときにも ×1 に戻す。
+    // 通信ケーブルでつないでいる間は ×1 に固定する（切ったあとも ×1 のまま）
+    const [chosenSpeed, setSpeed] = useState<GameSpeed>(1);
+    // つないだときに ×1 に戻す（描画の中で前の値と比べる。React の「props が変わったら state を合わせる」書き方）
+    const [wasLinked, setWasLinked] = useState(linked);
+    if (linked !== wasLinked) {
+        setWasLinked(linked);
+        if (linked) setSpeed(1);
+    }
+    const speed: GameSpeed = linked ? 1 : chosenSpeed;
+    const cycleSpeed = (): void => {
+        if (linked) return;
         setSpeed(current => {
             const next = GAME_SPEEDS.indexOf(current) + 1;
             return GAME_SPEEDS[next % GAME_SPEEDS.length];
         });
+    };
 
     // 停止（本家のリセット）。同じ ROM の「タップして開始」に戻る
     const stopGame = (): void => {
         flushPendingSaves();
+        setLocalGame(null);
         resetEmulator();
         setActiveRomId(null);
         setSpeed(1);
@@ -283,6 +310,11 @@ const useRomSession = () => {
         }
         currentRomRef.current = rom;
         setSpeed(1);
+        // コアを作り直したあとで、通信ケーブルにつなぐ（つながっていれば時刻を 0 からそろえ直す）
+        setLocalGame({
+            title: result.title,
+            cgb: detectMode(rom) === "CGB",
+        });
         setStatus({
             kind: "running",
             rom: toSummary(rom),
@@ -522,7 +554,7 @@ const useRomSession = () => {
 
     // 画面の「ロード」（確認のあと）。ROM の枠から戻す。手前のセーブが終わるのを待ってから読む
     const loadFromSlot = async (): Promise<void> => {
-        if (status.kind !== "running") return;
+        if (status.kind !== "running" || linked) return;
         const romId = status.rom.id;
         try {
             const record = await enqueueSlot(() => getSaveState(romId));
@@ -533,6 +565,8 @@ const useRomSession = () => {
                 showFlash("セーブがありません");
                 return;
             }
+            // 読んでいる間につないだなら、ロードしない（片方だけ時を戻すと相手と食い違う）
+            if (linkedRef.current) return;
             const error = applySaveStateBytes(new Uint8Array(record.data));
             if (error !== null) {
                 setNotice(`ロードできませんでした。${error}`.trim());
@@ -552,6 +586,7 @@ const useRomSession = () => {
     };
 
     const loadState = async (file: File): Promise<void> => {
+        if (linkedRef.current) return;
         setNotice(await loadSaveStateFile(file));
     };
 
@@ -571,6 +606,7 @@ const useRomSession = () => {
         resume,
         speed,
         cycleSpeed,
+        link,
         stop: startReset,
         slot,
         flash,

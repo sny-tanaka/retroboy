@@ -18,6 +18,7 @@ import {
 import { pressKey, releaseKey } from "./core/retroboyCore";
 import { flushPendingSaves } from "./emulator/cartridgeEffects";
 import GameScreen from "./emulator/GameScreen";
+import { closeLink, dismissLink } from "./link/linkStore";
 import {
     APP_VERSION,
     isUpdateReady,
@@ -28,6 +29,7 @@ import type { GbButton } from "./ui/buttons";
 import { LoadStateConfirm } from "./ui/ConfirmDialog";
 import { type ControlLayout, useControlLayout } from "./ui/controlLayout";
 import { GbcBody } from "./ui/GbcBody";
+import { describeLink, describeWaiting } from "./ui/LinkMenu";
 import { MenuSheet } from "./ui/MenuSheet";
 import { RomMenu } from "./ui/RomMenu";
 
@@ -161,7 +163,20 @@ const App = () => {
     const updateReady = useSyncExternalStore(onUpdateReady, isUpdateReady);
     const [updateDismissed, setUpdateDismissed] = useState(false);
     const showUpdateNotice = updateReady && !updateDismissed;
-    const { status, playing, paused, roms } = session;
+    const { status, playing, paused, roms, link } = session;
+    // 通信ケーブル: 相手を待っている（遊んでいる間だけ出す）・応答が無い・切れた
+    const openLink = link?.phase.kind === "open" ? link : null;
+    const linkWaiting =
+        openLink && playing && openLink.waiting && !openLink.silent
+            ? describeWaiting(openLink)
+            : null;
+    const linkSilent = openLink?.silent ?? false;
+    const linkClosed = link?.phase.kind === "closed" ? describeLink(link) : null;
+    const linkLabel = openLink
+        ? openLink.rttMs === null
+            ? "通信中"
+            : `通信中 ${openLink.rttMs}ms`
+        : undefined;
     const running = status.kind === "running";
     const busy = status.kind === "booting" || status.kind === "loading";
     const currentRomId =
@@ -338,7 +353,10 @@ const App = () => {
                     status.kind === "running" &&
                     !session.notice &&
                     !session.flash &&
-                    !showUpdateNotice ? null : (
+                    !showUpdateNotice &&
+                    !linkWaiting &&
+                    !linkSilent &&
+                    !linkClosed ? null : (
                         <>
                             <ScreenMessage
                                 status={status}
@@ -355,6 +373,29 @@ const App = () => {
                                     role="status"
                                 >
                                     {session.flash.message}
+                                </div>
+                            )}
+                            {linkWaiting && (
+                                <div className="gbc-link-waiting" role="status">
+                                    {linkWaiting}
+                                </div>
+                            )}
+                            {linkSilent && (
+                                <div className="gbc-notice" role="alert">
+                                    <span>
+                                        相手から応答がありません。待つか、通信を切ってください。
+                                    </span>
+                                    <button type="button" onClick={closeLink}>
+                                        通信を切る
+                                    </button>
+                                </div>
+                            )}
+                            {linkClosed && !session.notice && (
+                                <div className="gbc-notice" role="alert">
+                                    <span>{linkClosed}</span>
+                                    <button type="button" onClick={dismissLink}>
+                                        閉じる
+                                    </button>
                                 </div>
                             )}
                             {session.notice && (
@@ -394,12 +435,14 @@ const App = () => {
                 inert={menuOpen || confirmingLoad !== null}
                 speed={session.speed}
                 onCycleSpeed={session.cycleSpeed}
+                linkLabel={linkLabel}
                 onResume={resumeByUser}
                 onSaveState={() => session.saveToSlot(canvasRef.current)}
                 onLoadState={() => openLoadConfirm("slot")}
                 canLoadState={
-                    session.slot.kind === "saved" ||
-                    session.slot.kind === "unreadable"
+                    !openLink &&
+                    (session.slot.kind === "saved" ||
+                        session.slot.kind === "unreadable")
                 }
                 onOpenMenu={openMenu}
                 onButtonDown={handleButtonDown}
@@ -427,6 +470,11 @@ const App = () => {
                     onSelectControlLayout={selectControlLayout}
                     paused={userPaused}
                     onTogglePause={toggleUserPause}
+                    link={link}
+                    onCloseLink={() => {
+                        closeLink();
+                        closeMenu();
+                    }}
                 />
             </MenuSheet>
             <LoadStateConfirm

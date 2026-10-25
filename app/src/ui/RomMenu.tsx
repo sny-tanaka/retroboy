@@ -1,7 +1,9 @@
+import type { LinkStatus } from "../link/linkSession";
 import type { RomSummary } from "../storage/romDb";
 import type { StorageStatus } from "../storage/storageStatus";
 import type { ControlLayout } from "./controlLayout";
 import { ControlLayoutMenu } from "./ControlLayoutMenu";
+import { LinkMenu } from "./LinkMenu";
 
 interface RomMenuProps {
     readonly roms: readonly RomSummary[];
@@ -27,6 +29,9 @@ interface RomMenuProps {
     /** 自分で一時停止している（メニューを開いたことによる一時停止は含めない） */
     readonly paused: boolean;
     readonly onTogglePause: () => void;
+    /** 通信ケーブルのつながり。無ければ「通信ケーブル」の欄を出さない */
+    readonly link: LinkStatus | null;
+    readonly onCloseLink: () => void;
 }
 
 /** メニューの一番上の「一時停止」「再開」。押すとメニューは閉じる（呼ぶ側で閉じる） */
@@ -80,7 +85,10 @@ export const RomMenu = ({
     onSelectControlLayout,
     paused,
     onTogglePause,
+    link,
+    onCloseLink,
 }: RomMenuProps) => {
+    const linked = link?.phase.kind === "open";
     const storage = storageStatus && formatStorage(storageStatus);
     return (
         <>
@@ -89,6 +97,7 @@ export const RomMenu = ({
                 disabled={!gameActive}
                 onTogglePause={onTogglePause}
             />
+            {link && <LinkMenu link={link} onCloseLink={onCloseLink} />}
             <section className="gbc-menu-section">
                 <h2 className="gbc-menu-heading">ROM</h2>
                 {roms.length === 0 ? (
@@ -150,14 +159,14 @@ export const RomMenu = ({
                     <button
                         type="button"
                         className="gbc-menu-item"
-                        disabled={!gameActive}
+                        disabled={!gameActive || linked}
                         onClick={onImportState}
                     >
                         ファイルから読み込む
                     </button>
                 </div>
                 <p className="gbc-menu-note">
-                    読み込むと、いまの進みは上書きされます。画面の「セーブ」「ロード」が使う端末内のセーブとは別です。ゲームを始めてから使えます。
+                    読み込むと、いまの進みは上書きされます。画面の「セーブ」「ロード」が使う端末内のセーブとは別です。ゲームを始めてから使えます。通信ケーブルでつないでいる間は読み込めません。
                 </p>
             </section>
 
