@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# core/（本家 Retro Boy のコアを Cargo の git 参照で取り込むクレート）を WASM にビルドし、
+# core/（パッチを当てた本家 Retro Boy のコアを path 依存で取り込むクレート）を WASM にビルドし、
 # app/src/core/ に retroboyCore.js / retroboyCore_bg.wasm などを出力する。
-# 本家のソースは初回のビルドで Cargo が取ってくる（版は core/Cargo.toml の rev と core/Cargo.lock で固定）。
+# 本家のソースは scripts/prepare-core.sh が core/upstream/ に取ってきてパッチを当てる（版は core/upstream.rev で固定）。
 # 本家 Makefile の build-wasm と同じ wasm-pack の呼び方（--target web --out-name retroboyCore --release）。
 # 生成物は git に入れない（app/src/core/ と core/target/ は .gitignore 済み）。
 set -euo pipefail
@@ -23,6 +23,9 @@ if ! command -v wasm-pack >/dev/null 2>&1; then
   echo "wasm-pack が見つかりません。README の「必要なツール」を参照してください。" >&2
   exit 1
 fi
+
+# 本家を core/upstream/ に用意してパッチを当てる（変わっていなければ何もしない）
+"$ROOT/scripts/prepare-core.sh"
 
 # --locked: core/Cargo.lock と食い違うときは書き換えずに失敗させる（版を勝手に動かさない）
 wasm-pack build "$CORE_DIR" --target web --out-dir "$OUT_DIR" --out-name retroboyCore --release -- --locked

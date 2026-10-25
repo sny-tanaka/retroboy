@@ -5,9 +5,10 @@ This product includes software developed as part of Retro Boy
 (https://github.com/smparsons/retroboy), licensed under the Apache License,
 Version 2.0. Copyright smparsons.
 
-- Retro Boy 本家のコアは core/Cargo.toml から Cargo の git 参照で取り込み、
-  コミット edf90d9fb192372a657a18d44f5c9841805fa554 に固定している。
-  本家のコードはリポジトリに含めず、変更もしていない。ビルドした WASM（app/src/core/ に生成）を配信物に含む。
+- Retro Boy 本家のコアは、コミット edf90d9fb192372a657a18d44f5c9841805fa554（core/upstream.rev）を
+  ビルドのときに取ってきて、core/patches/ のパッチ（通信ケーブルのための serial の変更など）を当てて使う。
+  本家のコードそのものはリポジトリに含めない（パッチだけを含む）。変更した本家のファイルは、パッチの中に
+  変更点を記している。ビルドした WASM（app/src/core/ に生成）を配信物に含む。
 - app/src/emulator/ のつなぎのコードは Retro Boy の frontends/web から移したもので、
   各ファイルの先頭に出どころ（本家のパスとコミット）と変更点を記している。
 

@@ -1,0 +1,586 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Shunya Tanaka <s05.t12.030@gmail.com>
+Date: Mon, 26 Oct 2026 00:14:07 +0900
+Subject: [PATCH 2/3] Add link cable port to serial
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+serial: 通信ケーブルの口（LinkPort）を足す
+
+つないでいる間は、親機は送り始めに Transfer を積み、8 ビット分の時間が来たら相手の返事で
+転送を終える（返事が無ければ waiting_reply で止まる）。子機は受け取る時刻に SB を入れ替えて
+割り込みを立て、Reply を積む。受ける用意が無ければ 0x00、自分も親機なら 0xFF を返す（SameBoy）。
+LinkPort はセーブステートに入れない（Serial の欄は変えない）。Emulator に step_link などを足す。
+
+遅れて届いた（受け取る時刻を過ぎた）バイトは、届いたときにすぐ受け取る。ただし続けて届いたときは、
+親機が送った間隔以上を空けて受け取る（子機が次の用意をする間を残す）。受け取りを待っているバイトが
+あれば、step_link は limit を越えてもそこまで進む（親機は返事を待って止まっているので追い越さない）。
+---
+ src/address_bus.rs |  18 ++++-
+ src/emulator.rs    |  64 +++++++++++++++
+ src/serial.rs      | 191 ++++++++++++++++++++++++++++++++++++++++++---
+ src/serial/link.rs | 137 ++++++++++++++++++++++++++++++++
+ 4 files changed, 398 insertions(+), 12 deletions(-)
+ create mode 100644 src/serial/link.rs
+
+diff --git a/src/address_bus.rs b/src/address_bus.rs
+index 64e2007..5880e79 100644
+--- a/src/address_bus.rs
++++ b/src/address_bus.rs
+@@ -11,7 +11,8 @@ use crate::address_bus::effects::empty_cartridge_effects;
+ use crate::address_bus::hdma::HDMAState;
+ use crate::serializable::Serializable;
+ use crate::serial::Serial;
+-use crate::utils::is_bit_set;
++use crate::serial::link::LinkPort;
++use crate::utils::{get_t_cycle_increment, is_bit_set};
+ use crate::address_bus::speed_switch::SpeedSwitch;
+ use getset::{CopyGetters, Getters, MutGetters, Setters};
+ use std::io::{self, Read, Write};
+@@ -70,6 +71,9 @@ pub struct AddressBus {
+     
+     #[getset(get = "pub(super)", get_mut = "pub(super)")]
+     serial: Serial,
++
++    #[getset(get = "pub(crate)", get_mut = "pub(crate)")]
++    link: LinkPort,
+     
+     #[getset(get = "pub(crate)", get_mut = "pub(crate)")]
+     cheats: CheatState,
+@@ -100,6 +104,7 @@ impl AddressBus {
+             dma: DMAState::new(),
+             hdma: HDMAState::new(),
+             serial: Serial::new(),
++            link: LinkPort::new(),
+             cheats: CheatState::new(),
+             speed_switch: SpeedSwitch::new(),
+             cgb_mode: false,
+@@ -174,7 +179,13 @@ impl AddressBus {
+         self.apu.step(ApuParams {
+             divider: self.timers.divider(),
+         });
+-        self.serial.step();
++        let t_cycle_increment = get_t_cycle_increment(self.speed_switch.cgb_double_speed());
++        self.link.tick(t_cycle_increment);
++        self.serial.step(&mut self.link);
++    }
++
++    pub(crate) fn receive_due_link_transfers(&mut self) {
++        self.serial.receive_due_transfers(&mut self.link);
+     }
+ 
+     pub(super) fn trigger_oam_bug_write(&mut self) {
+@@ -334,7 +345,8 @@ impl MemoryMapped for AddressBus {
+                     0xF00 if address >= 0xFF80 => self.zero_page_ram[(address & 0x7F) as usize] = value,
+                     _ => match address & 0xFF {
+                         0x00 => self.joypad.write_byte(value),
+-                        0x01..=0x02 => self.serial.write_byte(address, value),
++                        0x02 => self.serial.write_control_linked(value, &mut self.link),
++                        0x01 => self.serial.write_byte(address, value),
+                         0x10..=0x26 | 0x30..=0x3F => self.apu.write_byte(address, value),
+                         0x40..=0x45 | 0x47..=0x4C | 0x4F | 0x68..=0x6C => self.gpu.write_byte(address, value),
+                         0x46 => self.dma.start_dma(value),
+diff --git a/src/emulator.rs b/src/emulator.rs
+index 84f8a4e..210f9e4 100644
+--- a/src/emulator.rs
++++ b/src/emulator.rs
+@@ -9,6 +9,15 @@ pub use crate::address_bus::effects::CartridgeEffects;
+ pub use crate::address_bus::{CartridgeHeader, RTCState};
+ pub use crate::cpu::{Registers, BusActivityEntry, BusActivityType};
+ pub use crate::joypad::Key;
++pub use crate::serial::link::LinkEvent;
++
++#[derive(Clone, Copy, Debug, PartialEq, Eq)]
++pub enum LinkStepResult {
++    AudioBufferFull,
++    EventPending,
++    WaitingReply,
++    ReachedLimit,
++}
+ 
+ #[derive(Serializable, Getters, MutGetters)]
+ #[getset(get = "pub(crate)", get_mut = "pub(crate)")]
+@@ -72,6 +81,61 @@ impl Emulator {
+         (left_samples_slice, right_samples_slice)        
+     }
+ 
++    pub fn set_link_connected(&mut self, connected: bool) {
++        self.address_bus_mut().link_mut().set_connected(connected);
++        self.address_bus_mut().apu_mut().clear_audio_buffers();
++    }
++
++    pub fn link_connected(&self) -> bool {
++        self.address_bus().link().connected()
++    }
++
++    pub fn link_clock(&self) -> u64 {
++        self.address_bus().link().clock()
++    }
++
++    pub fn take_link_event(&mut self) -> Option<LinkEvent> {
++        self.address_bus_mut().link_mut().take_event()
++    }
++
++    pub fn deliver_link_transfer(&mut self, seq: u32, at: u64, byte: u8) {
++        self.address_bus_mut().link_mut().deliver_transfer(seq, at, byte);
++        self.address_bus_mut().receive_due_link_transfers();
++    }
++
++    pub fn deliver_link_reply(&mut self, seq: u32, byte: u8) {
++        self.address_bus_mut().link_mut().deliver_reply(seq, byte);
++    }
++
++    pub fn step_link(&mut self, limit: u64) -> LinkStepResult {
++        loop {
++            let limit = limit.max(self.address_bus().link().next_incoming_at().unwrap_or(0));
++            let link = self.address_bus().link();
++            if link.has_event() {
++                return LinkStepResult::EventPending;
++            }
++            if link.waiting_reply() {
++                return LinkStepResult::WaitingReply;
++            }
++            if self.address_bus().apu().audio_buffers_full() {
++                return LinkStepResult::AudioBufferFull;
++            }
++            if link.clock() >= limit {
++                return LinkStepResult::ReachedLimit;
++            }
++            self.step();
++        }
++    }
++
++    pub fn audio_buffers(&self) -> (&[f32], &[f32]) {
++        let apu = self.address_bus().apu();
++        (apu.get_left_sample_queue(), apu.get_right_sample_queue())
++    }
++
++    pub fn clear_audio_buffers(&mut self) {
++        self.address_bus_mut().apu_mut().clear_audio_buffers();
++    }
++
+     pub fn handle_key_press(&mut self, key: &Key) {
+         self.address_bus_mut().handle_key_press(key);
+     }
+diff --git a/src/serial.rs b/src/serial.rs
+index 7946daa..091ba4e 100644
+--- a/src/serial.rs
++++ b/src/serial.rs
+@@ -1,6 +1,7 @@
+ use crate::utils::{get_t_cycle_increment, is_bit_set};
+ use crate::serializable::Serializable;
+ use crate::address_bus::MemoryMapped;
++use crate::serial::link::LinkPort;
+ use getset::{CopyGetters, Setters};
+ use serializable_derive::Serializable;
+ 
+@@ -69,7 +70,12 @@ impl Serial {
+         This is a very bare bones serial implementation that always assumes there is no
+         serial device connected and doesn't know how to operate in slave mode.
+     */
+-    pub(super) fn step(&mut self) {
++    pub(super) fn step(&mut self, link: &mut LinkPort) {
++        if link.connected() {
++            self.step_linked(link);
++            return;
++        }
++
+         if self.transfer_enabled && self.is_master {
+             self.clock += get_t_cycle_increment(self.cgb_double_speed) as u16;
+ 
+@@ -89,6 +95,61 @@ impl Serial {
+         }
+     }
+ 
++    fn transfer_duration(&self) -> u64 {
++        self.get_t_cycle_clock_rate() as u64 * 8
++    }
++
++    fn complete_transfer(&mut self, incoming: u8) {
++        self.data = incoming;
++        self.transfer_enabled = false;
++        self.bits_transferred = 0;
++        self.clock = 0;
++        self.interrupt = true;
++    }
++
++    fn step_linked(&mut self, link: &mut LinkPort) {
++        self.receive_due_transfers(link);
++        self.step_master_linked(link);
++    }
++
++    pub(super) fn receive_due_transfers(&mut self, link: &mut LinkPort) {
++        while let Some((seq, incoming)) = link.take_due_transfer() {
++            let reply = if !self.transfer_enabled {
++                0x00
++            } else if self.is_master {
++                0xFF
++            } else {
++                let outgoing = self.data;
++                self.complete_transfer(incoming);
++                outgoing
++            };
++            link.send_reply(seq, reply);
++        }
++    }
++
++    fn step_master_linked(&mut self, link: &mut LinkPort) {
++        let master_transfer_active = self.transfer_enabled && self.is_master;
++        match link.master() {
++            Some(_) if !master_transfer_active => link.end_master(),
++            Some(transfer) if link.clock() >= transfer.end_at => match transfer.reply {
++                Some(reply) => {
++                    link.end_master();
++                    self.complete_transfer(reply);
++                },
++                None => link.wait_for_reply()
++            },
++            None if master_transfer_active => link.begin_master(self.data, self.transfer_duration()),
++            _ => {}
++        }
++    }
++
++    pub(super) fn write_control_linked(&mut self, value: u8, link: &mut LinkPort) {
++        self.set_control(value);
++        if link.connected() {
++            link.end_master();
++        }
++    }
++
+     fn control(&self) -> u8 {
+         let transfer_enabled_bit = if self.transfer_enabled { 1 } else { 0 };
+         let high_speed_clock_bit = if self.is_high_speed_clock { 1 } else { 0 };
+@@ -125,9 +186,12 @@ impl MemoryMapped for Serial {
+     }
+ }
+ 
++pub(crate) mod link;
++
+ #[cfg(test)]
+ mod tests {
+     use super::*;
++    use crate::serial::link::LinkEvent;
+ 
+     #[test]
+     fn should_get_control_byte() {
+@@ -173,7 +237,7 @@ mod tests {
+         serial.transfer_enabled = true;
+         serial.is_master = true;
+         serial.clock = 0;
+-        serial.step();
++        serial.step(&mut LinkPort::new());
+         assert_eq!(serial.clock, 4);
+     }
+ 
+@@ -184,7 +248,7 @@ mod tests {
+         serial.transfer_enabled = true;
+         serial.is_master = true;
+         serial.clock = 0;
+-        serial.step();
++        serial.step(&mut LinkPort::new());
+         assert_eq!(serial.clock, 2);
+     }
+ 
+@@ -195,10 +259,10 @@ mod tests {
+         serial.is_master = true;
+         serial.data = 0x00;
+         for _ in 0..(128 * 8 - 1) {
+-            serial.step();
++            serial.step(&mut LinkPort::new());
+         }
+         assert_eq!(serial.interrupt, false);
+-        serial.step();
++        serial.step(&mut LinkPort::new());
+         assert_eq!(serial.interrupt, true);
+         assert_eq!(serial.data, 0xFF);
+     }
+@@ -210,7 +274,7 @@ mod tests {
+         serial.is_master = true;
+         serial.data = 0b10011010;
+         serial.clock = 511;
+-        serial.step();
++        serial.step(&mut LinkPort::new());
+         assert_eq!(serial.clock, 0);
+         assert_eq!(serial.data, 0b00110101);
+     }
+@@ -224,7 +288,7 @@ mod tests {
+         serial.is_master = true;
+         serial.data = 0b10011010;
+         serial.clock = 15;
+-        serial.step();
++        serial.step(&mut LinkPort::new());
+         assert_eq!(serial.clock, 0);
+         assert_eq!(serial.data, 0b00110101);
+     }
+@@ -239,7 +303,7 @@ mod tests {
+         serial.is_master = true;
+         serial.data = 0b10011010;
+         serial.clock = 7;
+-        serial.step();
++        serial.step(&mut LinkPort::new());
+         assert_eq!(serial.clock, 0);
+         assert_eq!(serial.data, 0b00110101);
+     }
+@@ -251,8 +315,117 @@ mod tests {
+         serial.is_master = true;
+         serial.bits_transferred = 7;
+         serial.clock = 511;
+-        serial.step();
++        serial.step(&mut LinkPort::new());
++        assert_eq!(serial.transfer_enabled, false);
++        assert_eq!(serial.interrupt, true);
++    }
++
++    fn connected_link() -> LinkPort {
++        let mut link = LinkPort::new();
++        link.set_connected(true);
++        link
++    }
++
++    fn step_linked_cycles(serial: &mut Serial, link: &mut LinkPort, machine_cycles: u32) {
++        for _ in 0..machine_cycles {
++            link.tick(4);
++            serial.step(link);
++        }
++    }
++
++    #[test]
++    fn should_send_transfer_event_when_master_transfer_starts_while_linked() {
++        let mut serial = Serial::new();
++        let mut link = connected_link();
++        serial.data = 0x42;
++        serial.write_control_linked(0x81, &mut link);
++        step_linked_cycles(&mut serial, &mut link, 1);
++        assert_eq!(link.take_event(), Some(LinkEvent::Transfer { seq: 0, at: 4 + 4096, byte: 0x42 }));
++    }
++
++    #[test]
++    fn should_wait_for_reply_and_complete_master_transfer_with_reply() {
++        let mut serial = Serial::new();
++        let mut link = connected_link();
++        serial.data = 0x42;
++        serial.write_control_linked(0x81, &mut link);
++        step_linked_cycles(&mut serial, &mut link, 1025);
++        assert_eq!(link.waiting_reply(), true);
++        assert_eq!(serial.transfer_enabled, true);
++        link.deliver_reply(0, 0x99);
++        step_linked_cycles(&mut serial, &mut link, 1);
+         assert_eq!(serial.transfer_enabled, false);
+         assert_eq!(serial.interrupt, true);
++        assert_eq!(serial.data, 0x99);
++    }
++
++    #[test]
++    fn should_ignore_reply_for_cancelled_master_transfer() {
++        let mut serial = Serial::new();
++        let mut link = connected_link();
++        serial.write_control_linked(0x81, &mut link);
++        step_linked_cycles(&mut serial, &mut link, 1);
++        serial.write_control_linked(0x81, &mut link);
++        step_linked_cycles(&mut serial, &mut link, 1);
++        link.deliver_reply(0, 0x11);
++        step_linked_cycles(&mut serial, &mut link, 1100);
++        assert_eq!(link.waiting_reply(), true);
++        link.deliver_reply(1, 0x22);
++        step_linked_cycles(&mut serial, &mut link, 1);
++        assert_eq!(serial.data, 0x22);
++    }
++
++    #[test]
++    fn should_exchange_bytes_as_slave_when_transfer_arrives() {
++        let mut serial = Serial::new();
++        let mut link = connected_link();
++        serial.data = 0x24;
++        serial.write_control_linked(0x80, &mut link);
++        link.deliver_transfer(7, 100, 0x42);
++        step_linked_cycles(&mut serial, &mut link, 24);
++        assert_eq!(serial.transfer_enabled, true);
++        step_linked_cycles(&mut serial, &mut link, 1);
++        assert_eq!(serial.transfer_enabled, false);
++        assert_eq!(serial.interrupt, true);
++        assert_eq!(serial.data, 0x42);
++        assert_eq!(link.take_event(), Some(LinkEvent::Reply { seq: 7, byte: 0x24 }));
++    }
++
++    #[test]
++    fn should_reply_zero_when_slave_is_not_ready() {
++        let mut serial = Serial::new();
++        let mut link = connected_link();
++        serial.data = 0x24;
++        link.deliver_transfer(0, 0, 0x42);
++        step_linked_cycles(&mut serial, &mut link, 1);
++        assert_eq!(serial.data, 0x24);
++        assert_eq!(serial.interrupt, false);
++        assert_eq!(link.take_event(), Some(LinkEvent::Reply { seq: 0, byte: 0x00 }));
++    }
++
++    #[test]
++    fn should_keep_spacing_between_transfers_that_arrive_late() {
++        let mut serial = Serial::new();
++        let mut link = connected_link();
++        step_linked_cycles(&mut serial, &mut link, 250);
++        link.deliver_transfer(0, 100, 0x01);
++        link.deliver_transfer(1, 300, 0x02);
++        assert_eq!(link.next_incoming_at(), Some(1000));
++        step_linked_cycles(&mut serial, &mut link, 1);
++        assert_eq!(link.next_incoming_at(), Some(1200));
++    }
++
++    #[test]
++    fn should_reply_ff_when_both_sides_are_master() {
++        let mut serial = Serial::new();
++        let mut link = connected_link();
++        serial.data = 0x24;
++        serial.write_control_linked(0x81, &mut link);
++        step_linked_cycles(&mut serial, &mut link, 1);
++        link.take_event();
++        link.deliver_transfer(0, 0, 0x42);
++        step_linked_cycles(&mut serial, &mut link, 1);
++        assert_eq!(serial.data, 0x24);
++        assert_eq!(link.take_event(), Some(LinkEvent::Reply { seq: 0, byte: 0xFF }));
+     }
+ }
+diff --git a/src/serial/link.rs b/src/serial/link.rs
+new file mode 100644
+index 0000000..74a0676
+--- /dev/null
++++ b/src/serial/link.rs
+@@ -0,0 +1,137 @@
++use std::collections::VecDeque;
++
++#[derive(Clone, Copy, Debug, PartialEq, Eq)]
++pub enum LinkEvent {
++    Transfer { seq: u32, at: u64, byte: u8 },
++    Reply { seq: u32, byte: u8 },
++}
++
++#[derive(Clone, Copy)]
++struct IncomingTransfer {
++    seq: u32,
++    at: u64,
++    byte: u8,
++}
++
++#[derive(Clone, Copy)]
++pub(crate) struct MasterTransfer {
++    pub(crate) end_at: u64,
++    pub(crate) reply: Option<u8>,
++    seq: u32,
++}
++
++pub(crate) struct LinkPort {
++    connected: bool,
++    clock: u64,
++    next_seq: u32,
++    outgoing: VecDeque<LinkEvent>,
++    incoming: VecDeque<IncomingTransfer>,
++    last_incoming: Option<(u64, u64)>,
++    master: Option<MasterTransfer>,
++    waiting_reply: bool,
++}
++
++impl LinkPort {
++    pub(crate) fn new() -> Self {
++        LinkPort {
++            connected: false,
++            clock: 0,
++            next_seq: 0,
++            outgoing: VecDeque::new(),
++            incoming: VecDeque::new(),
++            last_incoming: None,
++            master: None,
++            waiting_reply: false,
++        }
++    }
++
++    pub(crate) fn connected(&self) -> bool {
++        self.connected
++    }
++
++    pub(crate) fn set_connected(&mut self, connected: bool) {
++        *self = LinkPort::new();
++        self.connected = connected;
++    }
++
++    pub(crate) fn clock(&self) -> u64 {
++        self.clock
++    }
++
++    pub(crate) fn tick(&mut self, t_cycles: u8) {
++        if self.connected {
++            self.clock += t_cycles as u64;
++        }
++    }
++
++    pub(crate) fn waiting_reply(&self) -> bool {
++        self.waiting_reply
++    }
++
++    pub(crate) fn has_event(&self) -> bool {
++        !self.outgoing.is_empty()
++    }
++
++    pub(crate) fn take_event(&mut self) -> Option<LinkEvent> {
++        self.outgoing.pop_front()
++    }
++
++    pub(crate) fn deliver_transfer(&mut self, seq: u32, at: u64, byte: u8) {
++        if self.connected {
++            let spaced_at = self.last_incoming
++                .map(|(previous_at, previous_receive_at)| previous_receive_at + at.saturating_sub(previous_at))
++                .unwrap_or(0);
++            let receive_at = at.max(self.clock).max(spaced_at);
++            self.last_incoming = Some((at, receive_at));
++            self.incoming.push_back(IncomingTransfer { seq, at: receive_at, byte });
++        }
++    }
++
++    pub(crate) fn next_incoming_at(&self) -> Option<u64> {
++        self.incoming.front().map(|transfer| transfer.at)
++    }
++
++    pub(crate) fn deliver_reply(&mut self, seq: u32, byte: u8) {
++        if let Some(master) = self.master.as_mut() {
++            if master.seq == seq {
++                master.reply = Some(byte);
++                self.waiting_reply = false;
++            }
++        }
++    }
++
++    pub(crate) fn master(&self) -> Option<MasterTransfer> {
++        self.master
++    }
++
++    pub(crate) fn begin_master(&mut self, byte: u8, duration: u64) {
++        let seq = self.next_seq;
++        self.next_seq = self.next_seq.wrapping_add(1);
++        let end_at = self.clock + duration;
++        self.master = Some(MasterTransfer { end_at, reply: None, seq });
++        self.outgoing.push_back(LinkEvent::Transfer { seq, at: end_at, byte });
++    }
++
++    pub(crate) fn end_master(&mut self) {
++        self.master = None;
++        self.waiting_reply = false;
++    }
++
++    pub(crate) fn wait_for_reply(&mut self) {
++        self.waiting_reply = true;
++    }
++
++    pub(crate) fn take_due_transfer(&mut self) -> Option<(u32, u8)> {
++        match self.incoming.front() {
++            Some(transfer) if transfer.at <= self.clock => {
++                let transfer = self.incoming.pop_front()?;
++                Some((transfer.seq, transfer.byte))
++            },
++            _ => None
++        }
++    }
++
++    pub(crate) fn send_reply(&mut self, seq: u32, byte: u8) {
++        self.outgoing.push_back(LinkEvent::Reply { seq, byte });
++    }
++}

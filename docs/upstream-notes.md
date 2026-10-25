@@ -2,8 +2,9 @@
 
 ② (ROM の IndexedDB 保存と自動読み込み) と ③ (UI の作り直し) の作業者向け。本家の仕組みと、このアプリでどう変えたか（「このアプリでは」の段落）を書く。
 
-- 対象: [smparsons/retroboy](https://github.com/smparsons/retroboy) コミット `edf90d9fb192372a657a18d44f5c9841805fa554`（2026-03-01、`core/Cargo.toml` の Cargo の git 参照 `rev` と `core/Cargo.lock` で固定）
-- 以下のパスは特に断りがなければ本家リポジトリのルートからの相対パス。本家のソースは [GitHub の該当コミット](https://github.com/smparsons/retroboy/tree/edf90d9fb192372a657a18d44f5c9841805fa554) か、ビルド後の Cargo のチェックアウト先（`~/.cargo/git/checkouts/retroboy-<ハッシュ>/edf90d9/`）で読める。
+- 対象: [smparsons/retroboy](https://github.com/smparsons/retroboy) コミット `edf90d9fb192372a657a18d44f5c9841805fa554`（2026-03-01、`core/upstream.rev` で固定）
+- 以下のパスは特に断りがなければ本家リポジトリのルートからの相対パス。本家のソースは [GitHub の該当コミット](https://github.com/smparsons/retroboy/tree/edf90d9fb192372a657a18d44f5c9841805fa554) か、ビルド後の `core/upstream/`（`core/patches/` のパッチを当てたもの）で読める。
+- このメモは、特に断りがなければパッチを当てる前の本家のこと。パッチで変えたのは通信ケーブルの部分だけ（serial の速さの直し・通信の口・WASM の API。下の「通信ケーブル（パッチ）」と `docs/link-cable-design.md`）。
 
 ## 全体の構成
 
@@ -29,6 +30,7 @@
 | `encodeSaveState(): SaveStateResult` | セーブステートのバイト列（`saveState`）か `error` |
 | `applySaveState(data: Uint8Array): string \| undefined` | 適用。失敗時はエラー文を返す |
 | `validateGamesharkCode` / `validateGamegenieCode` / `registerGamesharkCheat` / `registerGamegenieCheat` / `unregisterCheat` | チート。今回のアプリでは使っていない |
+| `linkSetConnected` / `linkClock` / `linkStep` / `linkTakeEvent` / `linkDeliverTransfer` / `linkDeliverReply` | 通信ケーブル（パッチで足したもの。下の「通信ケーブル（パッチ）」） |
 
 ### コア → JS（window に置く関数）
 
@@ -112,6 +114,19 @@
 - 適用時にタイトルが今のゲームと違えばエラー（「This save state is meant to be used for a different game…」）。版が違ってもエラー。**本家のコミットを上げるとセーブステートの版が変わって古いものが読めなくなることがある**。
 - セーブステートにはカートリッジ RAM も含まれ、適用すると RAM も巻き戻る（そのあと書き込みがあれば localStorage のセーブ RAM も上書きされる）。
 - 設計書 9 章のとおり、セーブステートの自動保存・自動復元は今回の対象外。
+- 通信ケーブルのパッチは、セーブステートの形を変えていない（`Serial` の欄を変えず、通信の状態 `LinkPort` はセーブステートに入れない）。パッチを当てる前のセーブステートもそのまま読める。
+
+## 通信ケーブル（パッチ）
+
+`core/patches/` の 3 本。設計と、2 台の進みの合わせ方は `docs/link-cable-design.md`。
+
+- **0001 serial の速さ**: 本家の `src/serial.rs` は、1 ビットの時間（T サイクルの値: 通常 512、倍速モード 256、GBC の高速クロック 16 / 8）を、1 M サイクルに 1 ずつ数えていた。このため転送が実機の 4 倍（倍速モードでは 2 倍）遅かった。`get_t_cycle_increment` ずつ数えるように直した（つないでいないときも、0xFF が実機の速さで届くようになる）。
+- **0002 通信の口**: `src/serial/link.rs` の `LinkPort`（`AddressBus` が持つ。セーブステートに入れない）。つないでいる間（`set_link_connected(true)`）だけ働き、つないでいなければ本家どおり。
+  - 時刻: `LinkPort` が 4MHz の T サイクルで数える（倍速モードでは 1 M サイクルに 2）。つないだときに 0 から。
+  - 親機（SC = $81 / $83）: 送り始めに `Transfer { seq, at, byte }` を積む。`at` は送り始め + 8 ビットの時間で、相手はこの時刻に受け取る。`at` に着いて返事（`Reply`）が来ていれば、SB を返事にして SC の bit 7 を下ろし、割り込みを立てる。来ていなければ `waiting_reply` で止まる。転送中に SC を書き直すと、その転送は取り消し（あとから来た返事は `seq` で捨てる）。1 ビットずつはずらさない（バイト単位）。
+  - 子機: 受け取ったバイトは `at` に受け取る（もう過ぎていれば、届いたときにすぐ。続けて届いたときは、親機が送った間隔以上を空ける）。そのとき SC の bit 7 が立っていて bit 0 が 0 なら、SB を入れ替えて割り込みを立て、元の SB を `Reply` で返す。SC の bit 7 が 0 なら 0x00、自分も親機なら 0xFF を返し、SB は変えない（SameBoy の `GB_serial_get_data_bit` / `GB_serial_set_data_bit` と同じ。Pan Docs には書かれていない）。
+  - `Emulator::step_link(limit)`: 命令を 1 つずつ実行し、送るものがある・返事待ち・音のバッファが一杯・`limit` に着いた、のどれかで止まる。受け取りを待っているバイトがあれば、`limit` を越えてもその時刻まで進む。
+- **0003 WASM の API**: `linkSetConnected(connected)`、`linkClock()`、`linkStep(limit)`（0 = 音のバッファが一杯〔`playAudioSamples` を呼び、バッファを空にした〕、1 = 送るものがある、2 = 返事待ち、3 = `limit` に着いた）、`linkTakeEvent()`（`[種類 0 = Transfer / 1 = Reply, seq, at, byte]` の `Float64Array` か `undefined`）、`linkDeliverTransfer(seq, at, byte)`、`linkDeliverReply(seq, byte)`。時刻は `number`（2^53 T サイクル＝約 68 年分まで正確）。
 
 ## ROM 読み込みと切り替え時の初期化
 

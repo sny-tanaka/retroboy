@@ -5,12 +5,13 @@
     "type": "module",
     "scripts": {
         "build:wasm": "../scripts/build-wasm.sh",
+        "test:core": "../scripts/test-core.sh",
         "dev": "vite",
         "build": "tsc --noEmit && vite build && node scripts/generate-sw.mjs",
         "preview": "vite preview",
         "typecheck": "tsc --noEmit",
         "lint": "eslint .",
-        "check": "npm run build:wasm && npm run typecheck && npm run lint && vite build && node scripts/generate-sw.mjs",
+        "check": "npm run build:wasm && npm run test:core && npm run typecheck && npm run lint && vite build && node scripts/generate-sw.mjs",
         "deploy": "npm run check && cd .. && npx --yes netlify-cli@27.14.2 deploy --prod --no-build --dir=app/dist"
     },
     "dependencies": {

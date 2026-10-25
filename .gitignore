@@ -7,5 +7,16 @@
 # Rust のビルド生成物（scripts/build-wasm.sh）
 target/
 
+# パッチを当てた本家のコピー（scripts/prepare-core.sh が作る）
+/core/upstream/
+
+# 自作のテスト ROM は入れてよい（著作権の問題が無い）。上の *.gb / *.gbc は市販 ROM の誤コミットを防ぐために残し、
+# testroms/ の中だけ例外にする。testroms/ は app/ の外なので、app/dist（配信物）には入らない
+!/testroms/**/*.gb
+!/testroms/**/*.gbc
+
+# テスト ROM のビルドの途中の生成物（scripts/build-testroms.sh）
+/testroms/build/
+
 # netlify link が作る、つないだ Netlify サイトの情報
 .netlify/

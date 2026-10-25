@@ -1,0 +1,82 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Shunya Tanaka <s05.t12.030@gmail.com>
+Date: Mon, 26 Oct 2026 00:11:56 +0900
+Subject: [PATCH 1/3] Count serial bit time in T-cycles
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+serial: 1 ビットの時間を T サイクルで数える（実機の 4 倍遅かったのを直す）
+
+しきい値（512 / 256 / 16 / 8）は 4MHz の T サイクルの値なのに、clock は 1 M サイクルに 1 しか
+増えていなかった。APU と同じく get_t_cycle_increment（通常 4、倍速モード 2）ずつ足す。
+---
+ src/serial.rs | 36 +++++++++++++++++++++++++++++++-----
+ 1 file changed, 31 insertions(+), 5 deletions(-)
+
+diff --git a/src/serial.rs b/src/serial.rs
+index 367450d..7946daa 100644
+--- a/src/serial.rs
++++ b/src/serial.rs
+@@ -1,4 +1,4 @@
+-use crate::utils::is_bit_set;
++use crate::utils::{get_t_cycle_increment, is_bit_set};
+ use crate::serializable::Serializable;
+ use crate::address_bus::MemoryMapped;
+ use getset::{CopyGetters, Setters};
+@@ -48,7 +48,7 @@ impl Serial {
+         self.cgb_double_speed = cgb_double_speed;
+     }
+ 
+-    fn get_m_cycle_clock_rate(&self) -> u16 {
++    fn get_t_cycle_clock_rate(&self) -> u16 {
+         if self.is_high_speed_clock && self.cgb_mode {
+             if self.cgb_double_speed { 8 } else { 16 }
+         } else {
+@@ -71,9 +71,9 @@ impl Serial {
+     */
+     pub(super) fn step(&mut self) {
+         if self.transfer_enabled && self.is_master {
+-            self.clock += 1;
++            self.clock += get_t_cycle_increment(self.cgb_double_speed) as u16;
+ 
+-            let clock_rate = self.get_m_cycle_clock_rate();
++            let clock_rate = self.get_t_cycle_clock_rate();
+             if self.clock >= clock_rate {
+                 self.clock = 0;
+ 
+@@ -174,7 +174,33 @@ mod tests {
+         serial.is_master = true;
+         serial.clock = 0;
+         serial.step();
+-        assert_eq!(serial.clock, 1);
++        assert_eq!(serial.clock, 4);
++    }
++
++    #[test]
++    fn should_increment_clock_by_two_in_double_speed_mode() {
++        let mut serial = Serial::new();
++        serial.cgb_double_speed = true;
++        serial.transfer_enabled = true;
++        serial.is_master = true;
++        serial.clock = 0;
++        serial.step();
++        assert_eq!(serial.clock, 2);
++    }
++
++    #[test]
++    fn should_transfer_byte_in_128_machine_cycles_per_bit() {
++        let mut serial = Serial::new();
++        serial.transfer_enabled = true;
++        serial.is_master = true;
++        serial.data = 0x00;
++        for _ in 0..(128 * 8 - 1) {
++            serial.step();
++        }
++        assert_eq!(serial.interrupt, false);
++        serial.step();
++        assert_eq!(serial.interrupt, true);
++        assert_eq!(serial.data, 0xFF);
+     }
+ 
+     #[test]

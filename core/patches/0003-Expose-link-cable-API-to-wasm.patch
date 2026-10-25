@@ -1,0 +1,90 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Shunya Tanaka <s05.t12.030@gmail.com>
+Date: Mon, 26 Oct 2026 00:14:44 +0900
+Subject: [PATCH 3/3] Expose link cable API to wasm
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+wasm: 通信ケーブルの API を足す
+
+linkSetConnected / linkClock / linkStep / linkTakeEvent / linkDeliverTransfer / linkDeliverReply。
+linkStep は音のバッファが一杯（playAudioSamples を呼ぶ）・送るものがある・返事待ち・limit に
+着いた、のどれかで止まり、0〜3 を返す。linkTakeEvent は [種類, seq, at, byte] の Float64Array。
+---
+ src/wasm/api.rs | 55 +++++++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 55 insertions(+)
+
+diff --git a/src/wasm/api.rs b/src/wasm/api.rs
+index 10b39a4..4105937 100644
+--- a/src/wasm/api.rs
++++ b/src/wasm/api.rs
+@@ -1,6 +1,7 @@
+ use crate::address_bus::cheats;
+ use crate::emulator::Emulator;
+ use crate::emulator::CartridgeHeader;
++use crate::emulator::{LinkEvent, LinkStepResult};
+ use crate::joypad::Key;
+ use crate::wasm::emulator_settings::EmulatorSettings;
+ use crate::wasm::rom_metadata::{RomMetadata, RomMetadataResult};
+@@ -97,6 +98,60 @@ pub fn step_until_next_audio_buffer() {
+     })
+ }
+ 
++#[wasm_bindgen(js_name = linkSetConnected)]
++pub fn link_set_connected(connected: bool) {
++    EMULATOR.with(|emulator_cell| {
++        emulator_cell.borrow_mut().set_link_connected(connected);
++    })
++}
++
++#[wasm_bindgen(js_name = linkClock)]
++pub fn link_clock() -> f64 {
++    EMULATOR.with(|emulator_cell| emulator_cell.borrow().link_clock() as f64)
++}
++
++#[wasm_bindgen(js_name = linkStep)]
++pub fn link_step(limit: f64) -> u8 {
++    EMULATOR.with(|emulator_cell| {
++        let mut emulator = emulator_cell.borrow_mut();
++        match emulator.step_link(limit.max(0.0) as u64) {
++            LinkStepResult::AudioBufferFull => {
++                let (left_samples, right_samples) = emulator.audio_buffers();
++                play_audio_samples(left_samples, right_samples);
++                emulator.clear_audio_buffers();
++                0
++            },
++            LinkStepResult::EventPending => 1,
++            LinkStepResult::WaitingReply => 2,
++            LinkStepResult::ReachedLimit => 3,
++        }
++    })
++}
++
++#[wasm_bindgen(js_name = linkTakeEvent)]
++pub fn link_take_event() -> Option<Vec<f64>> {
++    EMULATOR.with(|emulator_cell| {
++        emulator_cell.borrow_mut().take_link_event().map(|event| match event {
++            LinkEvent::Transfer { seq, at, byte } => vec![0.0, seq as f64, at as f64, byte as f64],
++            LinkEvent::Reply { seq, byte } => vec![1.0, seq as f64, 0.0, byte as f64],
++        })
++    })
++}
++
++#[wasm_bindgen(js_name = linkDeliverTransfer)]
++pub fn link_deliver_transfer(seq: u32, at: f64, byte: u8) {
++    EMULATOR.with(|emulator_cell| {
++        emulator_cell.borrow_mut().deliver_link_transfer(seq, at.max(0.0) as u64, byte);
++    })
++}
++
++#[wasm_bindgen(js_name = linkDeliverReply)]
++pub fn link_deliver_reply(seq: u32, byte: u8) {
++    EMULATOR.with(|emulator_cell| {
++        emulator_cell.borrow_mut().deliver_link_reply(seq, byte);
++    })
++}
++
+ const UP_CODE: &str = "Up";
+ const DOWN_CODE: &str = "Down";
+ const LEFT_CODE: &str = "Left";
