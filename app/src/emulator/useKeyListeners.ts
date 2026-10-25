@@ -6,7 +6,8 @@
 //   一時停止・リセット・アンマウントのときに全ボタンを離すようにした（keyup がコアに届かず押しっぱなしになるため）。
 import { useEffect } from "react";
 
-import { pressKey, releaseKey } from "../core/retroboyCore";
+import { releaseKey } from "../core/retroboyCore";
+import { pressGameKey, releaseGameKey } from "./gameKeys";
 
 // KeyboardEvent.code（本家と同じく、無ければ KeyboardEvent.key）→ コアの pressKey/releaseKey に渡すボタン名
 export const keyMap: Record<string, string> = {
@@ -35,7 +36,7 @@ export const useKeyListeners = (playing: boolean): void => {
             const control = toControl(event);
             if (control) {
                 event.preventDefault();
-                pressKey(control);
+                pressGameKey(control);
             }
         };
 
@@ -43,7 +44,7 @@ export const useKeyListeners = (playing: boolean): void => {
             const control = toControl(event);
             if (control) {
                 event.preventDefault();
-                releaseKey(control);
+                releaseGameKey(control);
             }
         };
 

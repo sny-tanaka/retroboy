@@ -8,15 +8,18 @@
 //   emulator/saveState.ts に、状態とロジック（ROM の保存・自動読み込み・起動）は session/useRomSession.ts に切り出した。
 //   モードの選択は外し、ROM ヘッダの CGB フラグか拡張子 .gbc で決めるようにした。
 import {
+    lazy,
     type RefObject,
+    Suspense,
     useEffect,
     useRef,
     useState,
     useSyncExternalStore,
 } from "react";
 
-import { pressKey, releaseKey } from "./core/retroboyCore";
+import { releaseKey } from "./core/retroboyCore";
 import { flushPendingSaves } from "./emulator/cartridgeEffects";
+import { pressGameKey, releaseGameKey } from "./emulator/gameKeys";
 import GameScreen from "./emulator/GameScreen";
 import { closeLink, dismissLink } from "./link/linkStore";
 import {
@@ -105,8 +108,11 @@ const ScreenMessage = ({
     }
 };
 
+// 「通信ケーブル」でつなぐ画面。QR のライブラリを最初の起動で読み込まないよう、開くときに読み込む
+const LinkConnect = lazy(() => import("./ui/LinkConnect"));
+
 // 一時停止の理由になる、開いているもの
-type Overlay = "menu" | "confirm" | "romPicker" | "statePicker";
+type Overlay = "menu" | "confirm" | "romPicker" | "statePicker" | "link";
 type FilePicker = "romPicker" | "statePicker";
 
 // ファイル選択から戻ってきたあと、選んだファイルの change を待つ時間
@@ -265,6 +271,23 @@ const App = () => {
         }
     };
 
+    // 「通信ケーブルでつなぐ」の画面。メニューから開く（先に開いてからメニューを閉じ、その間に再開しないように）
+    const [linkConnectOpen, setLinkConnectOpen] = useState(false);
+    const openLinkConnect = (): void => {
+        hold("link");
+        setLinkConnectOpen(true);
+        closeMenu();
+    };
+    const closeLinkConnect = (): void => {
+        setLinkConnectOpen(false);
+        // つながる前に閉じたら、作りかけのつながりは捨てる
+        if (link && link.phase.kind !== "open") {
+            closeLink();
+            dismissLink();
+        }
+        release("link");
+    };
+
     const openLoadConfirm = (source: "slot" | "file"): void => {
         hold("confirm");
         setConfirmingLoad(source);
@@ -319,14 +342,14 @@ const App = () => {
     const pressedRef = useRef(new Set<GbButton>());
     const handleButtonDown = (button: GbButton): void => {
         pressedRef.current.add(button);
-        if (playing) pressKey(button);
+        if (playing) pressGameKey(button);
     };
     const handleButtonUp = (button: GbButton): void => {
         pressedRef.current.delete(button);
-        releaseKey(button);
+        releaseGameKey(button);
     };
     useEffect(() => {
-        if (playing) pressedRef.current.forEach(button => pressKey(button));
+        if (playing) pressedRef.current.forEach(button => pressGameKey(button));
     }, [playing]);
 
     // 操作の配置。切り替えたら、押している扱いのボタンを全部離す（前の配置の部品が消えても押しっぱなしにしない）
@@ -432,7 +455,7 @@ const App = () => {
                 powerOn={running}
                 paused={paused}
                 gameActive={running}
-                inert={menuOpen || confirmingLoad !== null}
+                inert={menuOpen || confirmingLoad !== null || linkConnectOpen}
                 speed={session.speed}
                 onCycleSpeed={session.cycleSpeed}
                 linkLabel={linkLabel}
@@ -475,7 +498,22 @@ const App = () => {
                         closeLink();
                         closeMenu();
                     }}
+                    onOpenLinkConnect={openLinkConnect}
                 />
+            </MenuSheet>
+            <MenuSheet
+                open={linkConnectOpen}
+                onClose={closeLinkConnect}
+                title="通信ケーブル"
+            >
+                <Suspense
+                    fallback={<p className="gbc-menu-note">読み込み中…</p>}
+                >
+                    <LinkConnect
+                        appVersion={APP_VERSION}
+                        onClose={closeLinkConnect}
+                    />
+                </Suspense>
             </MenuSheet>
             <LoadStateConfirm
                 open={confirmingLoad !== null}

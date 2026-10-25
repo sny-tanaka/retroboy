@@ -17,6 +17,7 @@ import {
     linkSetConnected,
     linkStep,
     linkTakeEvent,
+    releaseKey,
 } from "../core/retroboyCore";
 import {
     decodeMessage,
@@ -36,6 +37,8 @@ export const WINDOW_MS = 32;
 // TIME を送る間隔（ゲーム内）。1 回の linkStep もこの長さで区切る
 const TIME_INTERVAL_MS = 4;
 const TIME_INTERVAL = TIME_INTERVAL_MS * T_CYCLES_PER_MS;
+// 1 フレーム（T サイクル。倍速モードでも画面は同じ速さなので同じ）。ボタンを離すのを遅らせる長さ
+const FRAME = 70224;
 
 // 止まってからこれだけたったら「相手を待っています」を出す
 const WAITING_NOTICE_MS = 300;
@@ -116,6 +119,10 @@ export class LinkSession {
     private stalledSince: number | null = null;
     private stallCount = 0;
     private stalledMs = 0;
+    // つないでいる間に押したボタンと、そのときのコアの時刻
+    private readonly pressedAt = new Map<string, number>();
+    // 離すのを遅らせているボタンと、離す時刻
+    private readonly pendingReleases = new Map<string, number>();
     private lastReceivedAt = performance.now();
     private lastPingAt = 0;
     private readonly ticker: ReturnType<typeof setInterval>;
@@ -157,6 +164,7 @@ export class LinkSession {
         if (info && this.statusValue.phase.kind === "open") {
             this.activateCore();
         } else if (!info && this.coreActive) {
+            this.resetKeys();
             this.coreActive = false;
             this.stalledSince = null;
             this.send({ type: "stop" });
@@ -187,6 +195,7 @@ export class LinkSession {
         const start = linkClock();
         const result = linkStep(Math.min(peerLimit, start + TIME_INTERVAL));
         this.sendEvents();
+        this.releaseDueKeys();
         const now = linkClock();
         if (now > start) this.markProgress();
         if (now - this.lastSentTime >= TIME_INTERVAL) this.sendTime(now);
@@ -203,15 +212,58 @@ export class LinkSession {
         }
     }
 
+    /** ボタンを押した（emulator/gameKeys.ts）。離すのを遅らせるために、押した時刻を覚える */
+    notePress(key: string): void {
+        if (!this.coreActive) return;
+        this.pendingReleases.delete(key);
+        this.pressedAt.set(key, linkClock());
+    }
+
+    /**
+     * ボタンを離した。押してからゲームの中で 1 フレーム進んでいなければ、離すのをそこまで遅らせて true を返す
+     * （コアにはまだ伝えない）。false ならすぐ伝えてよい
+     */
+    deferRelease(key: string): boolean {
+        const pressedAt = this.pressedAt.get(key);
+        this.pressedAt.delete(key);
+        if (!this.coreActive || pressedAt === undefined) return false;
+        const releaseAt = pressedAt + FRAME;
+        if (linkClock() >= releaseAt) return false;
+        this.pendingReleases.set(key, releaseAt);
+        return true;
+    }
+
+    // 遅らせていたボタンのうち、時刻が来たもの（force なら全部）を離す
+    private releaseDueKeys(force = false): void {
+        if (this.pendingReleases.size === 0) return;
+        const now = force ? Infinity : linkClock();
+        this.pendingReleases.forEach((releaseAt, key) => {
+            if (now >= releaseAt) {
+                this.pendingReleases.delete(key);
+                releaseKey(key);
+            }
+        });
+    }
+
+    // コアの時刻が 0 に戻る・通信から外れるとき。遅らせていたボタンは離し、押した時刻は忘れる
+    private resetKeys(): void {
+        this.releaseDueKeys(true);
+        this.pressedAt.clear();
+    }
+
     /** 試験用の数（docs/link-cable-design.md 3.6 を測るため）。開発時は window.__retroboyLink() で読める */
     stats(): {
         readonly clock: number;
         readonly stalls: number;
         readonly stalledMs: number;
+        readonly pressedKeys: readonly string[];
+        readonly pendingReleases: readonly string[];
     } {
         return {
             clock: this.coreActive ? linkClock() : 0,
             stalls: this.stallCount,
+            pressedKeys: [...this.pressedAt.keys()],
+            pendingReleases: [...this.pendingReleases.keys()],
             stalledMs: Math.round(
                 this.stalledMs +
                     (this.stalledSince === null
@@ -260,6 +312,7 @@ export class LinkSession {
     private activateCore(): void {
         if (!this.localGame) return;
         this.epoch += 1;
+        this.resetKeys();
         linkSetConnected(true);
         this.coreActive = true;
         this.peerTime = 0;
@@ -304,6 +357,7 @@ export class LinkSession {
                     this.epoch = message.epoch;
                     if (this.coreActive) {
                         // 相手に合わせて時刻を 0 からやり直す（途中の転送は捨てる）
+                        this.resetKeys();
                         linkSetConnected(true);
                         this.peerTime = 0;
                         this.lastSentTime = 0;
@@ -383,6 +437,7 @@ export class LinkSession {
         clearInterval(this.ticker);
         if (this.coreActive) {
             // ゲームはそのまま続ける（コアはつながっていない状態に戻り、親機は 0xFF を受け取る）
+            this.resetKeys();
             linkSetConnected(false);
             this.coreActive = false;
         }

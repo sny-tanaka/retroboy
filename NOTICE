@@ -12,6 +12,13 @@ Version 2.0. Copyright smparsons.
 - app/src/emulator/ のつなぎのコードは Retro Boy の frontends/web から移したもので、
   各ファイルの先頭に出どころ（本家のパスとコミット）と変更点を記している。
 
+通信ケーブルの画面（app/src/link/qr.ts）で、次のライブラリを使い、配信物に含む。
+- qrcode-generator (https://github.com/kazuhikoarase/qrcode-generator)
+  Copyright (c) 2009 Kazuhiko Arase. MIT License.
+  The word "QR Code" is registered trademark of DENSO WAVE INCORPORATED.
+- jsQR (https://github.com/cozmo/jsQR)
+  Licensed under the Apache License, Version 2.0.
+
 Retro Boy のコアには次のブート ROM が含まれる（本家の src/bios.rs）。
 ライセンスはそれぞれのリポジトリを参照。
 - DMG: Bootix (https://github.com/Hacktix/Bootix)

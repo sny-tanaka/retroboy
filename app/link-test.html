@@ -45,8 +45,16 @@
     <body>
         <p id="info"></p>
         <div class="pair">
-            <iframe id="left" title="左の端末" allow="autoplay"></iframe>
-            <iframe id="right" title="右の端末" allow="autoplay"></iframe>
+            <iframe
+                id="left"
+                title="左の端末"
+                allow="autoplay; camera; clipboard-write"
+            ></iframe>
+            <iframe
+                id="right"
+                title="右の端末"
+                allow="autoplay; camera; clipboard-write"
+            ></iframe>
         </div>
         <script>
             const params = new URLSearchParams(location.search);
@@ -58,12 +66,16 @@
             for (const name of ["linkDelay", "linkJitter", "linkWindow"]) {
                 if (params.get(name)) app.set(name, params.get(name));
             }
-            const url = `/?${app}`;
+            // ?mode=webrtc: タブどうしの道ではつながず、それぞれのメニューの「通信ケーブルでつなぐ」から
+            // WebRTC でつなぐ（QR の代わりにコードのコピー・貼り付けを使う）
+            const webrtc = params.get("mode") === "webrtc";
+            const url = webrtc ? "/" : `/?${app}`;
             document.getElementById("left").src = url;
             document.getElementById("right").src = url;
-            document.getElementById("info").textContent =
-                `通信ケーブルの試験: 片道の遅れ ${params.get("linkDelay") || 0} ms・揺れ ${params.get("linkJitter") || 0} ms` +
-                "（URL に ?linkDelay=10&linkJitter=5 のように付けて変える）。それぞれ「タップして開始」を押す。";
+            document.getElementById("info").textContent = webrtc
+                ? "通信ケーブルの試験（WebRTC）: 左のメニュー →「通信ケーブルでつなぐ」→「QR を出す」、右は「QR を読む」で、コードをコピー・貼り付けしてつなぐ。"
+                : `通信ケーブルの試験: 片道の遅れ ${params.get("linkDelay") || 0} ms・揺れ ${params.get("linkJitter") || 0} ms` +
+                  "（URL に ?linkDelay=10&linkJitter=5 のように付けて変える。?mode=webrtc で WebRTC）。それぞれ「タップして開始」を押す。";
         </script>
     </body>
 </html>

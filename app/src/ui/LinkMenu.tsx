@@ -33,30 +33,48 @@ export const describeWaiting = (link: LinkStatus): string =>
           ? "相手が一時停止しています…"
           : "相手を待っています…";
 
-/** メニューの「通信ケーブル」。つながりがあるときだけ出す（つなぐ画面は PR ③ で足す） */
+/** メニューの「通信ケーブル」。つないでいなければ「つなぐ」、つないでいれば状態と「通信を切る」 */
 export const LinkMenu = ({
     link,
     onCloseLink,
+    onOpenConnect,
 }: {
-    readonly link: LinkStatus;
+    readonly link: LinkStatus | null;
     readonly onCloseLink: () => void;
-}) => (
-    <section className="gbc-menu-section">
-        <h2 className="gbc-menu-heading">通信ケーブル</h2>
-        <p className="gbc-menu-note">{describeLink(link)}</p>
-        {link.phase.kind === "open" && (
-            <>
-                {link.rttMs !== null && (
+    /** つなぐ画面（QR）を開く */
+    readonly onOpenConnect: () => void;
+}) =>
+    !link || link.phase.kind === "closed" ? (
+        <section className="gbc-menu-section">
+            <h2 className="gbc-menu-heading">通信ケーブル</h2>
+            {link && <p className="gbc-menu-note">{describeLink(link)}</p>}
+            <button
+                type="button"
+                className="gbc-menu-item"
+                onClick={onOpenConnect}
+            >
+                通信ケーブルでつなぐ
+            </button>
+            <p className="gbc-menu-note">
+                同じ Wi-Fi のもう 1 台と、QR を読み合ってつなぎます（交換・対戦）。
+            </p>
+        </section>
+    ) : (
+        <section className="gbc-menu-section">
+            <h2 className="gbc-menu-heading">通信ケーブル</h2>
+            <p className="gbc-menu-note">{describeLink(link)}</p>
+            {link.phase.kind === "open" && (
+                <>
+                    {link.rttMs !== null && (
+                        <p className="gbc-menu-note">
+                            往復の時間: {link.rttMs} ms
+                        </p>
+                    )}
                     <p className="gbc-menu-note">
-                        往復の時間: {link.rttMs} ms
+                        つないでいる間は ×1 の速さに固定し、ロードはできません。相手を待つ間はゲームが止まり、音が途切れます。
                     </p>
-                )}
-                <p className="gbc-menu-note">
-                    つないでいる間は ×1 の速さに固定し、ロードはできません。相手を待つ間はゲームが止まり、音が途切れます。
-                </p>
-            </>
-        )}
-        {link.phase.kind !== "closed" && (
+                </>
+            )}
             <button
                 type="button"
                 className="gbc-menu-item"
@@ -64,8 +82,7 @@ export const LinkMenu = ({
             >
                 通信を切る
             </button>
-        )}
-    </section>
-);
+        </section>
+    );
 
 export default LinkMenu;

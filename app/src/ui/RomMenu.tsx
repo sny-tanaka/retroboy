@@ -32,6 +32,7 @@ interface RomMenuProps {
     /** 通信ケーブルのつながり。無ければ「通信ケーブル」の欄を出さない */
     readonly link: LinkStatus | null;
     readonly onCloseLink: () => void;
+    readonly onOpenLinkConnect: () => void;
 }
 
 /** メニューの一番上の「一時停止」「再開」。押すとメニューは閉じる（呼ぶ側で閉じる） */
@@ -87,6 +88,7 @@ export const RomMenu = ({
     onTogglePause,
     link,
     onCloseLink,
+    onOpenLinkConnect,
 }: RomMenuProps) => {
     const linked = link?.phase.kind === "open";
     const storage = storageStatus && formatStorage(storageStatus);
@@ -97,7 +99,11 @@ export const RomMenu = ({
                 disabled={!gameActive}
                 onTogglePause={onTogglePause}
             />
-            {link && <LinkMenu link={link} onCloseLink={onCloseLink} />}
+            <LinkMenu
+                link={link}
+                onCloseLink={onCloseLink}
+                onOpenConnect={onOpenLinkConnect}
+            />
             <section className="gbc-menu-section">
                 <h2 className="gbc-menu-heading">ROM</h2>
                 {roms.length === 0 ? (
