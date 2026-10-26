@@ -80,6 +80,8 @@ npm run build
 npm run preview    # http://localhost:4173
 ```
 
+本番ビルドは音が鳴るので、手元で確かめるときは `http://localhost:4173/?mute=1` のように `?mute=1` を付けて開く（無音になるだけで、ゲームの進みは変わらない）。開発サーバー（`npm run dev`）は何も付けなくても無音（鳴らすときは `?sound=1`）。
+
 開いたあと、開発者ツールの Application で manifest と Service Worker（`sw.js`、activated）とキャッシュ（`retroboy-snap-<版>`）が見える。`npm run preview` を止めてから再読み込みしても起動する。開発サーバー（`npm run dev`）では Service Worker を登録しない。
 
 更新のお知らせは、開いたまま `npm run build` をやり直し、タブを裏に回して戻す（`visibilitychange`）と出る。

@@ -118,5 +118,5 @@ ROM の ID は利用者の ROM と同じく中身の SHA-256 なので、ゲー�
 
 1. `games/<id>/` を作り、ソースと Makefile と game.json を置く。
 2. `./scripts/build-games.sh <id>` で ROM を作る。
-3. `cd app && npm run dev` で開き、メニューの「内蔵ソフト」に出ることと動くことを確かめる。
+3. `cd app && npm run dev` で開き（開発サーバーは無音。音も確かめるときは `?sound=1` を付ける）、メニューの「内蔵ソフト」に出ることと動くことを確かめる。
 4. ソースと ROM をコミットする（`.gitignore` は `games/` の中の `*.gb` / `*.gbc` を例外にしてある）。

@@ -6,7 +6,7 @@
             開発時の確かめ用（npm run dev で /link-test.html）。本番ビルドには入らない。
             アプリを 2 つ横に並べ、通信ケーブル（?link=tab）でつなぐ。タブを 2 つ開いても同じことができるが、
             裏に回ったタブはブラウザがタイマーを間引くので、1 画面に並べたほうが速さを正しく測れる。
-            この画面の URL の linkDelay（片道 ms）・linkJitter（揺れの最大 ms）は、そのまま 2 つのアプリに渡す。
+            この画面の URL の linkDelay（片道 ms）・linkJitter（揺れの最大 ms）・sound・mute は、そのまま 2 つのアプリに渡す。
         -->
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="color-scheme" content="dark" />
@@ -63,13 +63,18 @@
                 // 組ごとに別の room にする（この画面を 2 つ開いても混ざらない）
                 room: crypto.randomUUID(),
             });
-            for (const name of ["linkDelay", "linkJitter", "linkWindow"]) {
+            for (const name of ["linkDelay", "linkJitter", "linkWindow", "sound", "mute"]) {
                 if (params.get(name)) app.set(name, params.get(name));
             }
             // ?mode=webrtc: タブどうしの道ではつながず、それぞれのメニューの「通信ケーブルでつなぐ」から
             // WebRTC でつなぐ（QR の代わりにコードのコピー・貼り付けを使う）
             const webrtc = params.get("mode") === "webrtc";
-            const url = webrtc ? "/" : `/?${app}`;
+            // 音の出し方（?sound=1・?mute=1）は、WebRTC のときも渡す
+            const sound = new URLSearchParams();
+            for (const name of ["sound", "mute"]) {
+                if (params.get(name)) sound.set(name, params.get(name));
+            }
+            const url = webrtc ? `/${sound.size ? `?${sound}` : ""}` : `/?${app}`;
             document.getElementById("left").src = url;
             document.getElementById("right").src = url;
             document.getElementById("info").textContent = webrtc

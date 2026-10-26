@@ -82,7 +82,8 @@ const page = await context.newPage();
 const errors = [];
 page.on("console", m => m.type() === "error" && errors.push(m.text()));
 page.on("pageerror", e => errors.push(e.message));
-await page.goto(`${origin}/link-test.html?mode=webrtc`);
+// 音は出さない（?mute=1。開発サーバーは何も付けなくても無音だが、本番ビルドに向けても無音にする）
+await page.goto(`${origin}/link-test.html?mode=webrtc&mute=1`);
 // iPhone 15 ほどの大きさ（390x844）に並べる
 await page.addStyleTag({
     content:

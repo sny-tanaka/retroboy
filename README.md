@@ -137,6 +137,8 @@ npm ci
 npm run dev        # http://localhost:5173
 ```
 
+開発サーバーは無音で動く（ゲームの進みは鳴らすときと同じ）。音を聞きたいときは URL に `?sound=1` を付ける。本番ビルドを手元で確かめるとき（`npm run preview` や Playwright）は、URL に `?mute=1` を付けると無音になる（付けなければ本番と同じく鳴る）。ブラウザでアプリを開く試験用のスクリプト（`scripts/link-e2e.mjs`）は `?mute=1` を付けて開く。仕組みは `app/src/emulator/audioOutput.ts`。
+
 ## まとめて検査する
 
 CI は置いていない（プライベートリポジトリのため）。PR を出す前に手元で次を流す:
@@ -158,7 +160,7 @@ WASM のビルド → コアの試験（テスト ROM のビルドを含む）�
 | `npm run typecheck` | 型チェック |
 | `npm run lint` | ESLint |
 | `npm run build` | 型チェックして `app/dist/` に本番ビルド |
-| `npm run preview` | 本番ビルドをローカルで配信（Service Worker も動く） |
+| `npm run preview` | 本番ビルドをローカルで配信（Service Worker も動く。音を出さずに確かめるときは URL に `?mute=1`） |
 | `npm run deploy` | `npm run check` を通してから Netlify の本番に上げる（下の「Netlify に公開する」） |
 | `npm run build:wasm` | `../scripts/build-wasm.sh` と同じ |
 
@@ -276,7 +278,7 @@ cargo update --manifest-path core/Cargo.toml   # 本家の依存が変わった�
 
 開発・試験用:
 
-- `npm run dev` で `/link-test.html` を開くと、アプリが 2 つ横に並び、同じブラウザの中の道（BroadcastChannel）でつながる。それぞれ「タップして開始」を押す。テスト ROM（上）なら、片方で B（子機）、もう片方で A（親機）を押すと受け渡しが始まる。URL に `?linkDelay=10&linkJitter=5` を付けると、送るものを片道 10ms 遅らせ、さらに 0〜5ms の揺れを足す。`&linkWindow=16` で、相手より先に進んでよい時間（既定 32ms）を変えられる。
+- `npm run dev` で `/link-test.html` を開くと、アプリが 2 つ横に並び、同じブラウザの中の道（BroadcastChannel）でつながる。それぞれ「タップして開始」を押す。テスト ROM（上）なら、片方で B（子機）、もう片方で A（親機）を押すと受け渡しが始まる。URL に `?linkDelay=10&linkJitter=5` を付けると、送るものを片道 10ms 遅らせ、さらに 0〜5ms の揺れを足す。`&linkWindow=16` で、相手より先に進んでよい時間（既定 32ms）を変えられる。`&sound=1` で 2 つのアプリの音を鳴らす（既定は無音）。
 - `/link-test.html?mode=webrtc` では自動ではつながず、それぞれのメニューの「通信ケーブルでつなぐ」から WebRTC でつなぐ（コードのコピー・貼り付けで）。
 - `scripts/link-e2e.mjs` は、`/link-test.html?mode=webrtc` で、QR を出す → 偽のカメラで読む → つながる → テスト ROM で受け渡す、を Playwright の WebKit で通して、各段の画面（390x844）を書き出す。使い方はファイルの先頭。
 - アプリの URL に直接 `?link=tab`（`&room=<名前>` で組を分ける）を付けても、同じ room の別のタブ・窓とつながる。ただし裏に回ったタブはブラウザがタイマーを間引くので、とても遅くなる。窓を 2 つ横に並べるか、`/link-test.html` を使う。

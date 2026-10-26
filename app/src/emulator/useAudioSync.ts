@@ -14,6 +14,7 @@
 //   通信ケーブル（link/linkSession.ts）でつないでいる間は、stepUntilNextAudioBuffer の代わりに link.step() を
 //   回して相手と進みを合わせる。相手を待つときは setTimeout を予約せずに抜け、相手のメッセージが届いたら
 //   （link.onWake）続きを走らせる。その間の音は途切れる。
+//   音は destination ではなく audioOutput.ts の出口につなぐ（開発サーバーでは無音にするため）。
 //
 // エミュレーターの進行は音で駆動する: stepUntilNextAudioBuffer() が 1 バッファ分進めて
 // window.playAudioSamples を呼び、そこで再生を予約する。
@@ -26,6 +27,7 @@ import { type RefObject, useEffect, useRef } from "react";
 
 import { stepUntilNextAudioBuffer } from "../core/retroboyCore";
 import { getLinkSession } from "../link/linkStore";
+import { audioOutputOf } from "./audioOutput";
 import { TimeStretcher } from "./timeStretch";
 
 const GAP_BEFORE_SAMPLE_PLAY = 15;
@@ -131,7 +133,7 @@ const useAudioSync = (
 
                     const bufferSource = audioContext.createBufferSource();
                     bufferSource.buffer = audioBuffer;
-                    bufferSource.connect(audioContext.destination);
+                    bufferSource.connect(audioOutputOf(audioContext));
                     bufferSource.start(nextPlayTimeRef.current);
                 }
 
