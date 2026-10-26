@@ -19,8 +19,9 @@
 - `scripts/build-games.sh` … `games/` のゲームのうち Makefile があるものをビルドする（GBDK-2020 など。`--check` でコミットしてある ROM と合っているかを確かめる）。
 - `testroms/` … 自作のテスト ROM（RGBDS のソースと、できた ROM）。いまは通信ケーブルのテスト ROM（`testroms/link/link.asm` と `linktest.gb`）。
 - `scripts/make-icons.sh` … アイコンの元画像から `app/public/icons/` の PNG を作る。
-- `netlify.toml` … Netlify での配信の設定（公開するフォルダとヘッダー）。
-- `docs/pwa-and-deploy.md` … ホーム画面アプリ（PWA）・Service Worker・Netlify 配信の仕組みと、アイコンの作り方。
+- `licenses/` … 配信物に入れる第三者のライセンスの全文のうち、取ってきたコアや node_modules に無いもの（ビルドで `app/dist/licenses/` に写る。一覧は `NOTICE`）。
+- `scripts/deploy-pages.sh` … `app/dist/` を GitHub Pages（`gh-pages` ブランチ）に出す（`npm run deploy`）。
+- `docs/pwa-and-deploy.md` … ホーム画面アプリ（PWA）・Service Worker・GitHub Pages での配信の仕組みと、アイコンの作り方。
 - `docs/upstream-notes.md` … 本家のセーブ RAM・セーブステート・WASM API の調査メモと、このアプリでの変更点。
 - `docs/future-work.md` … 今後の課題（ゲーム内セーブのバックアップなど）。
 - `docs/link-cable-design.md` … 通信ケーブル（同じ Wi-Fi の 2 台での交換・対戦）の設計。
@@ -147,7 +148,7 @@ npm run dev        # http://localhost:5173
 
 ## まとめて検査する
 
-CI は置いていない（プライベートリポジトリのため）。PR を出す前に手元で次を流す:
+CI は置いていない。PR を出す前に手元で次を流す:
 
 ```sh
 cd app
@@ -167,39 +168,51 @@ WASM のビルド → コアの試験（テスト ROM のビルドを含む）�
 | `npm run lint` | ESLint |
 | `npm run build` | 型チェックして `app/dist/` に本番ビルド |
 | `npm run preview` | 本番ビルドをローカルで配信（Service Worker も動く。音を出さずに確かめるときは URL に `?mute=1`） |
-| `npm run deploy` | `npm run check` を通してから Netlify の本番に上げる（下の「Netlify に公開する」） |
+| `npm run deploy` | `npm run check` を通してから GitHub Pages に出す（下の「GitHub Pages に公開する」。`-- --dry-run` で push しない） |
 | `npm run build:wasm` | `../scripts/build-wasm.sh` と同じ |
 
 キーボードでの操作: 方向 = 矢印キー / A = Z / B = X / START = Enter / SELECT = Space
 
-## Netlify に公開する
+## GitHub Pages に公開する
 
-Netlify の無料プランで、自分（チームオーナー）だけが見られる **Private** の状態で配信する。ビルドは手元で行い、`app/dist/` を netlify-cli で上げる（Netlify 側ではビルドしない）。netlify-cli は依存に入れず、`npx` で版を固定して使う。仕組みは `docs/pwa-and-deploy.md`。
+GitHub Pages で https://sny-tanaka.github.io/retroboy-snap/ に配信する（リポジトリは public）。ビルドは手元で行い、`app/dist/` の中身だけを 1 コミットにして `gh-pages` ブランチに強制で push する（GitHub Actions は使わない）。仕組みは `docs/pwa-and-deploy.md`。
+
+配信物は誰でも見られる。入るのはアプリ本体・内蔵の自作ソフト・ライセンスの文書だけで、市販の ROM は入らない（`app/dist` に ROM が入るとビルドが止まる）。検索エンジンには `index.html` の `<meta name="robots" content="noindex, nofollow">` で載せないように伝える（Pages ではヘッダーを付けられない）。
 
 ### 初回だけ
 
-リポジトリの一番上で実行する。
-
-1. Netlify のアカウントを作る（無料プラン）。
-2. ログインする: `npx --yes netlify-cli@27.14.2 login`（ブラウザが開くので許可する）
-3. 空のプロジェクトを作ってこのフォルダにつなぐ: `npx --yes netlify-cli@27.14.2 sites:create --name <好きな名前>`（`.netlify/` ができる。git には入れない）
-   - 別の PC でつなぎ直すときは `npx --yes netlify-cli@27.14.2 link --name <名前>`。
-4. **最初のデプロイの前に** Netlify の画面で Private にする: プロジェクトを開き、**Project configuration > General > Visitor access > Project visibility** で **Private** を選んで保存する。
-   - チーム全体の既定にしておくなら **Team settings > General > Visitor access > Default project visibility** で「Private for all projects」。
-   - 無料プランでは、Private のプロジェクトを見られるのはチームオーナーだけ。ログインしていない人には「アクセスできない」という Netlify の画面が出る。
+1. GitHub のリポジトリの **Settings > General > Danger Zone > Change repository visibility** で public にする（無料プランで Pages を使うため）。
+2. 一度 `npm run deploy` して `gh-pages` ブランチを作る（下の「毎回」）。
+3. **Settings > Pages > Build and deployment** で Source を **Deploy from a branch**、Branch を **gh-pages** と **/ (root)** にして保存する。
 
 ### 毎回
 
 ```sh
 cd app
-npm run deploy     # npm run check（WASM のビルド・型チェック・lint・本番ビルド）→ 本番に上げる
+npm run deploy     # npm run check → app/dist を gh-pages に 1 コミットで push → 公開の version.json が新しい版になるまで待つ
 ```
 
-上げたあと、ログインしていないブラウザ（プライベートブラウズなど）で URL を開いて、中身が見えないことを確かめる。
+`scripts/deploy-pages.sh` がすること:
+
+1. `npm run check`（WASM のビルド・コアの試験・型チェック・lint・本番ビルド・Service Worker の生成と ROM の検査）。
+2. `app/dist/` を一時ディレクトリに写し、そこで新しい git リポジトリを作って 1 コミットにする（作業中のブランチや作業ツリーには触らない）。作者は `sny-tanaka <36751082+sny-tanaka@users.noreply.github.com>`。
+3. `origin` の `gh-pages` に強制で push する（前の版は残さない）。
+4. https://sny-tanaka.github.io/retroboy-snap/version.json を 15 秒おきに取り、いま出した版の `buildId` になったら終わる（10 分で見切る）。
+
+push せずに中身だけ見たいときは `npm run deploy -- --dry-run`（コミットを作った一時ディレクトリの場所を出す）。
+
+出したあと手で確かめるとき:
+
+```sh
+curl -sS -o /dev/null -w '%{http_code}\n' https://sny-tanaka.github.io/retroboy-snap/version.json   # 200
+curl -sS https://sny-tanaka.github.io/retroboy-snap/version.json                                     # 出した版
+curl -sSI https://sny-tanaka.github.io/retroboy-snap/ | grep -i content-type                        # text/html
+curl -sSI "https://sny-tanaka.github.io/retroboy-snap/$(curl -sS https://sny-tanaka.github.io/retroboy-snap/sw.js | grep -o 'assets/[^"]*\.wasm')" | grep -i content-type   # application/wasm
+```
 
 ### iPhone のホーム画面に入れる
 
-1. iPhone の Safari で URL を開き、Netlify にログインする。
+1. iPhone の Safari で https://sny-tanaka.github.io/retroboy-snap/ を開く。
 2. 共有ボタン →「ホーム画面に追加」。
 3. ホーム画面のアイコンから開く。ホーム画面アプリは Safari と保存領域が別のことがあるので、ROM の追加とセーブの確かめはホーム画面アプリの中で行う（設計書 Step 7）。
 

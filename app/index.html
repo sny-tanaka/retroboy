@@ -8,10 +8,11 @@
             content="width=device-width, initial-scale=1, viewport-fit=cover"
         />
         <meta name="color-scheme" content="dark" />
-        <!-- 個人用。検索エンジンに載せない（netlify.toml の X-Robots-Tag と二重に） -->
+        <!-- 個人用。検索エンジンに載せない（GitHub Pages ではヘッダーを付けられないので、このメタだけで伝える） -->
         <meta name="robots" content="noindex, nofollow" />
         <!-- ホーム画面のアプリ（PWA）。色は暗い背景に合わせる -->
         <meta name="theme-color" content="#0e0d12" />
+        <!-- manifest とアイコンは / から書く。本番ビルドでは vite が base（./）に合わせて ./ に書き換える -->
         <link rel="manifest" href="/manifest.webmanifest" />
         <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
         <meta name="apple-mobile-web-app-capable" content="yes" />

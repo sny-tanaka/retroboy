@@ -23,6 +23,3 @@ target/
 !/games/**/*.gb
 !/games/**/*.gbc
 /games/*/build/
-
-# netlify link が作る、つないだ Netlify サイトの情報
-.netlify/

@@ -13,7 +13,7 @@
         "typecheck": "tsc --noEmit",
         "lint": "eslint .",
         "check": "npm run build:wasm && npm run test:core && ../scripts/build-games.sh --check && npm run typecheck && npm run lint && vite build && node scripts/generate-sw.mjs",
-        "deploy": "npm run check && cd .. && npx --yes netlify-cli@27.14.2 deploy --prod --no-build --dir=app/dist"
+        "deploy": "../scripts/deploy-pages.sh"
     },
     "dependencies": {
         "jsqr": "1.4.0",

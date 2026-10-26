@@ -5,19 +5,42 @@ This product includes software developed as part of Retro Boy
 (https://github.com/smparsons/retroboy), licensed under the Apache License,
 Version 2.0. Copyright smparsons.
 
+配信物（app/dist/）には、このファイル（NOTICE.txt）と、このリポジトリの LICENSE（LICENSE.txt）と、
+下に挙げるものそれぞれのライセンスの全文（licenses/ の下）を入れる（app/plugins/licenseFiles.ts）。
+全文が取ってきたコア（core/upstream/）や node_modules に無いものは、リポジトリの licenses/ に置いている。
+
 - Retro Boy 本家のコアは、コミット edf90d9fb192372a657a18d44f5c9841805fa554（core/upstream.rev）を
   ビルドのときに取ってきて、core/patches/ のパッチ（通信ケーブルのための serial の変更など）を当てて使う。
   本家のコードそのものはリポジトリに含めない（パッチだけを含む）。変更した本家のファイルは、パッチの中に
   変更点を記している。ビルドした WASM（app/src/core/ に生成）を配信物に含む。
+  → licenses/retroboy-LICENSE.txt
 - app/src/emulator/ のつなぎのコードは Retro Boy の frontends/web から移したもので、
   各ファイルの先頭に出どころ（本家のパスとコミット）と変更点を記している。
 
-通信ケーブルの画面（app/src/link/qr.ts）で、次のライブラリを使い、配信物に含む。
-- qrcode-generator (https://github.com/kazuhikoarase/qrcode-generator)
+ビルドした WASM には、次の Rust のクレートと Rust の標準ライブラリが入る（どれも MIT か Apache-2.0 の選択）。
+MIT の著作権表示と許諾の文を入れる。
+- wasm-bindgen 0.2.100 (https://github.com/rustwasm/wasm-bindgen) → licenses/wasm-bindgen-LICENSE-MIT.txt
+- console_error_panic_hook 0.1.7 → licenses/console_error_panic_hook-LICENSE-MIT.txt
+- cfg-if 1.0.1 → licenses/cfg-if-LICENSE-MIT.txt
+- once_cell 1.21.3 → licenses/once_cell-LICENSE-MIT.txt
+  （この 4 つは crates.io の配布物の LICENSE-MIT をそのまま写した）
+- Rust の標準ライブラリ (https://www.rust-lang.org) → licenses/rust-std-LICENSE-MIT.txt
+  Copyright The Rust Project Developers. rustup の toolchain の share/doc/rust/licenses/MIT.txt に、
+  COPYRIGHT-library.html にある著作権者を入れたもの。標準ライブラリの library/core/src/unicode は
+  Unicode License v3（Copyright 1991-2024 Unicode, Inc.）→ licenses/rust-std-unicode-LICENSE.txt
+  （同じ toolchain の Unicode-3.0.txt）。
+
+画面（JS のバンドル）に次の npm のパッケージが入る。バンドルには著作権表示が残らないので、全文を入れる。
+バンドルにここに無いパッケージが入ると、ビルドが止まる。
+- React・React DOM・scheduler (https://github.com/facebook/react)
+  Copyright (c) Meta Platforms, Inc. and affiliates. MIT License.
+  → licenses/react-LICENSE.txt・licenses/react-dom-LICENSE.txt・licenses/scheduler-LICENSE.txt
+- qrcode-generator 2.0.4 (https://github.com/kazuhikoarase/qrcode-generator)（通信ケーブルの画面 app/src/link/qr.ts）
   Copyright (c) 2009 Kazuhiko Arase. MIT License.
   The word "QR Code" is registered trademark of DENSO WAVE INCORPORATED.
-- jsQR (https://github.com/cozmo/jsQR)
-  Licensed under the Apache License, Version 2.0.
+  → licenses/qrcode-generator-LICENSE.txt（npm の配布物に LICENSE が無いので、GitHub のタグ js2.0.4 の LICENSE を写した）
+- jsQR (https://github.com/cozmo/jsQR)（同じ画面）
+  Licensed under the Apache License, Version 2.0. → licenses/jsqr-LICENSE.txt
 
 自作ゲーム「テイマーズライフ」（games/tamers-life/）の文字の形に、美咲フォントを使い、
 使う字だけを切り出して ROM（配信物）に含む。フォントのファイルは games/tamers-life/assets/font/misaki/ に置いている。
@@ -26,13 +49,19 @@ Version 2.0. Copyright smparsons.
   「These fonts are free softwares. Unlimited permission is granted to use, copy, and distribute it,
   with or without modification, either commercially and noncommercially.
   THESE FONTS ARE PROVIDED "AS IS" WITHOUT WARRANTY.」（同梱の misaki.txt の「ライセンス」）
+  → licenses/misaki-font.txt
   ▶ と ◀ は美咲フォントに無いので、自分で描いた（games/tamers-life/tools/text.py の CUSTOM）。
 
 自作ゲーム（games/）の ROM は GBDK-2020 (https://github.com/gbdk-2020/gbdk-2020) で作っており、
 ROM に GBDK のライブラリ（crt0 など）が入る。GBDK のライブラリは GPLv2 にリンクの例外を付けたもの
 （GBDK-2020 の配布物の licenses/LICENSE_GPLV2_LE）で、ROM に入れても ROM 全体に GPL はかからない。
+  例外の文の中で表示は求められていないので、全文は入れない。GBDK のうち別のライセンスのもの（ZX0・gbcompress・
+  crash handler など）は使っていない。
 
-Retro Boy のコアには次のブート ROM が含まれる（本家の src/bios.rs）。
-ライセンスはそれぞれのリポジトリを参照。
-- DMG: Bootix (https://github.com/Hacktix/Bootix)
+Retro Boy のコアには次のブート ROM が含まれる（本家の src/bios.rs）。コアの配布物に全文が無いので、
+それぞれのリポジトリの LICENSE を写した。
+- DMG: Bootix (https://github.com/Hacktix/Bootix)。CC0 1.0 Universal。
+  → licenses/bootix-LICENSE.txt（コミット e2121d0f2e5665efd87b53b53d16ea61775898f3 の LICENSE）
 - CGB: SameBoy の CGB ブート ROM を本家がカスタマイズしたもの (https://github.com/LIJI32/SameBoy)
+  Copyright (c) 2015-2026 Lior Halphon. Expat License (MIT).
+  → licenses/sameboy-LICENSE.txt（コミット e7da9386e1533268b7e9de73450e070b1498d1bf の LICENSE）

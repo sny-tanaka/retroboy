@@ -21,8 +21,8 @@ const FORBIDDEN = /\.(gb|gbc|rbs|sav|srm)$/i;
 // 内蔵ソフトの置き場と目録
 const BUILTIN_DIR = "builtin/";
 const BUILTIN_INDEX = `${BUILTIN_DIR}index.json`;
-// キャッシュに入れないもの: Service Worker 自身、ソースマップ、Netlify の設定ファイル
-const SKIP = new Set(["sw.js", "_headers", "_redirects"]);
+// キャッシュに入れないもの: Service Worker 自身、ソースマップ、GitHub Pages の印（Jekyll を通さない）
+const SKIP = new Set(["sw.js", ".nojekyll"]);
 
 async function listFiles(dir) {
     const entries = await readdir(dir, { withFileTypes: true });

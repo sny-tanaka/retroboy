@@ -5,6 +5,7 @@ import react from "@vitejs/plugin-react";
 import { defineConfig, type Plugin } from "vite";
 
 import { builtinGames } from "./plugins/builtinGames.ts";
+import { licenseFiles } from "./plugins/licenseFiles.ts";
 
 // git の結果。git が無い・リポジトリの外などで失敗したら null
 const git = (args: string): string | null => {
@@ -55,7 +56,10 @@ const versionFile = (): Plugin => ({
 });
 
 export default defineConfig({
-    plugins: [react(), versionFile(), builtinGames()],
+    // 本番ビルドは相対パスで参照する（GitHub Pages の https://sny-tanaka.github.io/retroboy-snap/ のような
+    // サブパスでも、vite preview の / でも、そのまま動く）。開発サーバーでは "/" として扱われる
+    base: "./",
+    plugins: [react(), versionFile(), builtinGames(), licenseFiles()],
     define: {
         __APP_VERSION__: JSON.stringify(appVersion),
         __BUILD_ID__: JSON.stringify(buildId),

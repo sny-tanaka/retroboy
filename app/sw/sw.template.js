@@ -15,7 +15,8 @@
 
 const CACHE_PREFIX = "retroboy-snap-";
 const CACHE_NAME = `${CACHE_PREFIX}${VERSION}`;
-// index.html のキャッシュのキー（Netlify では / が index.html を返す）
+// index.html のキャッシュのキー（GitHub Pages では /retroboy-snap/ が index.html を返す）。
+// 置き場所（スコープ）からの相対で決めるので、サブパスでも / でも同じように動く
 const SHELL_URL = new URL("./", self.registration.scope).href;
 // ページを開くとき、これより遅ければネットワークをあきらめてキャッシュから出す
 const NAVIGATION_TIMEOUT_MS = 3000;
@@ -72,11 +73,17 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(handleAsset(request));
 });
 
-// ページ（index.html）: オンラインなら新しい版を、オフラインや遅いときはキャッシュを出す
+// ページ（index.html）: オンラインなら新しい版を、オフラインや遅いときはキャッシュを出す。
+// cache: "no-cache": HTTP キャッシュにあっても必ずサーバーに確かめる（ETag で、変わっていなければ 304）。
+// GitHub Pages は index.html にも Cache-Control: max-age=600 を付け、ヘッダーを変えられない。
+// そのままだとデプロイ後 10 分ほど古い index.html が出て、もう配信していない古い JS を取りに行くことがある
 async function handleNavigation(request) {
     const cache = await caches.open(CACHE_NAME);
     try {
-        return await withTimeout(fetch(request), NAVIGATION_TIMEOUT_MS);
+        return await withTimeout(
+            fetch(request, { cache: "no-cache" }),
+            NAVIGATION_TIMEOUT_MS,
+        );
     } catch {
         const cached = await cache.match(SHELL_URL, { ignoreVary: true });
         if (cached) return cached;
