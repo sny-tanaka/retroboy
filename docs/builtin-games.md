@@ -16,7 +16,7 @@ games/
     build/              … ビルドの途中の生成物（git に入れない）
 ```
 
-いまは通信テスト（`games/linktest/`）だけで、ROM とソースは `testroms/link/` にある（RGBDS 製。コアの試験 `core/tests/link.rs` もこの ROM を使うので動かしていない）。
+いまは通信テスト（`games/linktest/`）と、テイマーズライフ（`games/tamers-life/`、GBDK-2020 製、作っているところ）の 2 つ。通信テストの ROM とソースは `testroms/link/` にある（RGBDS 製。コアの試験 `core/tests/link.rs` もこの ROM を使うので動かしていない）。
 
 ### game.json
 

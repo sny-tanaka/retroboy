@@ -102,7 +102,8 @@ ROM の ID の計算（`crypto.subtle`）は HTTPS か `localhost` でしか動�
 - rustup で入れた Rust と `wasm32-unknown-unknown` ターゲット
 - wasm-pack
 - RGBDS（テスト ROM のビルド。テスト ROM はリポジトリに入っているので、ソースを直すときだけ要る。入っていれば `npm run check` がソースと ROM が合っているかも確かめる）
-- GBDK-2020（`games/` の自作ゲームのビルド。ROM はリポジトリに入っているので、ゲームのソースを直すときだけ要る。入っていれば `npm run check` がソースと ROM が合っているかも確かめる）
+- GBDK-2020 **4.5.0**（`games/` の自作ゲームのビルド。ROM はリポジトリに入っているので、ゲームのソースを直すときだけ要る。入っていれば `npm run check` がソースと ROM が合っているかも確かめる。版が違うとできる ROM が変わり `--check` が止まるので、版をそろえる）
+- python3（標準のものだけ。テイマーズライフの文とフォントの変換 `games/tamers-life/tools/text.py` に使う。macOS には入っている）
 
 macOS（Homebrew）の例:
 
@@ -113,14 +114,19 @@ brew install rustup wasm-pack rgbds
 "$(brew --prefix rustup)/bin/rustup" target add wasm32-unknown-unknown
 ```
 
-GBDK-2020 は Homebrew に無いので、[GitHub Releases](https://github.com/gbdk-2020/gbdk-2020/releases) から macOS 用の tar.gz（Apple Silicon なら arm64 のもの）を落として `~/.local/gbdk` に展開する（別の場所なら環境変数 `GBDK_HOME` で指す）:
+GBDK-2020 は Homebrew に無いので、[GitHub Releases の 4.5.0](https://github.com/gbdk-2020/gbdk-2020/releases/tag/4.5.0) から macOS 用の tar.gz（Apple Silicon なら `gbdk-macos-arm64.tar.gz`、Intel なら `gbdk-macos.tar.gz`）を落として `~/.local/gbdk` に展開する（別の場所なら環境変数 `GBDK_HOME` で指す）:
 
 ```sh
+gh release download 4.5.0 -R gbdk-2020/gbdk-2020 -p gbdk-macos-arm64.tar.gz -D ~/Downloads
+shasum -a 256 ~/Downloads/gbdk-macos-arm64.tar.gz
+# 289ee60e46c5a2785a21e35533f84a5131ed4a063b21b0dbdedc9a10af15bf78 （2026-10-26 に落としたもの）
 mkdir -p ~/.local
 tar -xzf ~/Downloads/gbdk-macos-arm64.tar.gz -C ~/.local   # ~/.local/gbdk ができる
 xattr -dr com.apple.quarantine ~/.local/gbdk               # macOS に止められないように
 ~/.local/gbdk/bin/lcc -v
 ```
+
+版を上げるときは、全部のゲームを `./scripts/build-games.sh` で作り直して ROM もコミットし、ここの版と SHA-256 を書き換える。
 
 Homebrew の `rust` が入っていても消す必要はない（`rust` には wasm32 ターゲットが無いので、ビルドには rustup 側の cargo を使う）。
 

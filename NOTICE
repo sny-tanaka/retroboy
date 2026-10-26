@@ -19,6 +19,19 @@ Version 2.0. Copyright smparsons.
 - jsQR (https://github.com/cozmo/jsQR)
   Licensed under the Apache License, Version 2.0.
 
+自作ゲーム「テイマーズライフ」（games/tamers-life/）の文字の形に、美咲フォントを使い、
+使う字だけを切り出して ROM（配信物）に含む。フォントのファイルは games/tamers-life/assets/font/misaki/ に置いている。
+- 美咲フォント 2021-05-05 版 (https://littlelimit.net/misaki.htm)
+  Copyright (C) 2002-2021 Num Kadoma
+  「These fonts are free softwares. Unlimited permission is granted to use, copy, and distribute it,
+  with or without modification, either commercially and noncommercially.
+  THESE FONTS ARE PROVIDED "AS IS" WITHOUT WARRANTY.」（同梱の misaki.txt の「ライセンス」）
+  ▶ と ◀ は美咲フォントに無いので、自分で描いた（games/tamers-life/tools/text.py の CUSTOM）。
+
+自作ゲーム（games/）の ROM は GBDK-2020 (https://github.com/gbdk-2020/gbdk-2020) で作っており、
+ROM に GBDK のライブラリ（crt0 など）が入る。GBDK のライブラリは GPLv2 にリンクの例外を付けたもの
+（GBDK-2020 の配布物の licenses/LICENSE_GPLV2_LE）で、ROM に入れても ROM 全体に GPL はかからない。
+
 Retro Boy のコアには次のブート ROM が含まれる（本家の src/bios.rs）。
 ライセンスはそれぞれのリポジトリを参照。
 - DMG: Bootix (https://github.com/Hacktix/Bootix)
