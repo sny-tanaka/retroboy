@@ -3,9 +3,9 @@
 //   const PRECACHE = ["./", "assets/index-xxxx.js", ...];
 // を付けて dist/sw.js に書き出す（このファイルは直接は配信しない）。
 //
-// - アプリ本体（HTML・JS・CSS・WASM・アイコン・manifest）だけをキャッシュする。
-//   ROM・ゲーム内セーブ・セーブステートは IndexedDB / localStorage / ファイルで扱い、
-//   URL で取りに行かないのでここを通らない。
+// - アプリ本体（HTML・JS・CSS・WASM・アイコン・manifest）と内蔵ソフト（builtin/ の自作ゲームの ROM と目録）
+//   だけをキャッシュする。利用者が追加した ROM・ゲーム内セーブ・セーブステートは
+//   IndexedDB / localStorage / ファイルで扱い、URL で取りに行かないのでここを通らない。
 // - 同じオリジンの GET 以外（外部の URL、blob:、data: など）には手を出さない。
 //   このファイルから外へ通信することはない。
 // - 新しい版を配ると VERSION が変わり、sw.js が別物になる → 新しい Service Worker が
@@ -84,7 +84,7 @@ async function handleNavigation(request) {
     }
 }
 
-// JS・CSS・WASM・アイコン: キャッシュにあればそれを出し、無ければネットワークから取る
+// JS・CSS・WASM・アイコン・内蔵ソフトの ROM: キャッシュにあればそれを出し、無ければネットワークから取る
 // （取ったものはキャッシュに足さない。キャッシュに入るのは PRECACHE の一覧だけ）
 // ignoreVary: サーバーが Vary: Origin を返すと、Origin 付きで取りに来る
 // <script type="module"> がキャッシュ（Origin なしで取った）と一致せず、オフラインで失敗するため

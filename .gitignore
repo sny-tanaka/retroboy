@@ -11,12 +11,18 @@ target/
 /core/upstream/
 
 # 自作のテスト ROM は入れてよい（著作権の問題が無い）。上の *.gb / *.gbc は市販 ROM の誤コミットを防ぐために残し、
-# testroms/ の中だけ例外にする。testroms/ は app/ の外なので、app/dist（配信物）には入らない
+# testroms/ の中だけ例外にする（testroms/ をそのまま配信はしない。通信テストは games/linktest/ から内蔵ソフトとして配信する）
 !/testroms/**/*.gb
 !/testroms/**/*.gbc
 
 # テスト ROM のビルドの途中の生成物（scripts/build-testroms.sh）
 /testroms/build/
+
+# 自作ゲーム（games/）の ROM も入れてよい。アプリに内蔵して配信する（docs/builtin-games.md）。
+# ROM の置き場所は各ゲームの game.json の "rom"。ビルドの途中の生成物は各ゲームの build/ に出す（git に入れない）
+!/games/**/*.gb
+!/games/**/*.gbc
+/games/*/build/
 
 # netlify link が作る、つないだ Netlify サイトの情報
 .netlify/

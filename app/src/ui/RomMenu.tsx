@@ -1,4 +1,5 @@
 import type { LinkStatus } from "../link/linkSession";
+import type { BuiltinGame } from "../storage/builtinGame";
 import type { RomSummary } from "../storage/romDb";
 import type { StorageStatus } from "../storage/storageStatus";
 import type { ControlLayout } from "./controlLayout";
@@ -6,7 +7,10 @@ import { ControlLayoutMenu } from "./ControlLayoutMenu";
 import { LinkMenu } from "./LinkMenu";
 
 interface RomMenuProps {
+    /** 利用者が追加した ROM */
     readonly roms: readonly RomSummary[];
+    /** アプリに入っている自作ゲーム。選ぶだけで遊べて、削除はできない */
+    readonly builtinGames: readonly BuiltinGame[];
     /** いま読み込んでいる ROM（遊んでいる・開始待ち） */
     readonly currentRomId: string | null;
     /** 読み込み中などで ROM を選べない */
@@ -68,9 +72,69 @@ const formatStorage = ({ persisted, usageMB, quotaMB }: StorageStatus) => ({
     usage: `${usageMB ?? "?"} MB / ${quotaMB ?? "?"} MB`,
 });
 
-/** メニューの中身: 一時停止、ROM の一覧と追加、操作の配置、セーブステートのファイル、保存の状態、アプリの版 */
+const SYSTEM_LABELS = { gb: "GB", gbc: "GBC" } as const;
+
+/** メニューの「内蔵ソフト」。アプリに入っている自作ゲームを選ぶ */
+const BuiltinGameMenu = ({
+    games,
+    currentRomId,
+    busy,
+    onSelectRom,
+}: {
+    readonly games: readonly BuiltinGame[];
+    readonly currentRomId: string | null;
+    readonly busy: boolean;
+    readonly onSelectRom: (id: string) => void;
+}) => {
+    if (games.length === 0) return null;
+    return (
+        <section className="gbc-menu-section">
+            <h2 className="gbc-menu-heading">内蔵ソフト</h2>
+            <ul className="gbc-menu-list">
+                {games.map(game => {
+                    const current = game.sha256 === currentRomId;
+                    return (
+                        <li key={game.id}>
+                            <button
+                                type="button"
+                                className="gbc-menu-item gbc-menu-choice"
+                                data-current={current || undefined}
+                                aria-current={current || undefined}
+                                disabled={busy}
+                                onClick={() => onSelectRom(game.sha256)}
+                            >
+                                <span className="gbc-menu-choice-text">
+                                    <span className="gbc-menu-item-name">
+                                        {game.name}
+                                    </span>
+                                    <span className="gbc-menu-choice-description">
+                                        {game.description}
+                                    </span>
+                                </span>
+                                <span className="gbc-menu-system">
+                                    {SYSTEM_LABELS[game.system]}
+                                </span>
+                                {current && (
+                                    <span className="gbc-menu-badge">
+                                        選択中
+                                    </span>
+                                )}
+                            </button>
+                        </li>
+                    );
+                })}
+            </ul>
+            <p className="gbc-menu-note">
+                このアプリに入っている自作のソフトです。ファイルを用意しなくても遊べ、オフラインでも選べます。
+            </p>
+        </section>
+    );
+};
+
+/** メニューの中身: 一時停止、内蔵ソフト、ROM の一覧と追加、操作の配置、セーブステートのファイル、保存の状態、アプリの版 */
 export const RomMenu = ({
     roms,
+    builtinGames,
     currentRomId,
     busy,
     gameActive,
@@ -104,10 +168,16 @@ export const RomMenu = ({
                 onCloseLink={onCloseLink}
                 onOpenConnect={onOpenLinkConnect}
             />
+            <BuiltinGameMenu
+                games={builtinGames}
+                currentRomId={currentRomId}
+                busy={busy}
+                onSelectRom={onSelectRom}
+            />
             <section className="gbc-menu-section">
-                <h2 className="gbc-menu-heading">ROM</h2>
+                <h2 className="gbc-menu-heading">追加した ROM</h2>
                 {roms.length === 0 ? (
-                    <p className="gbc-menu-note">まだ登録されていません。</p>
+                    <p className="gbc-menu-note">まだ追加していません。</p>
                 ) : (
                     <ul className="gbc-menu-list">
                         {roms.map(rom => {

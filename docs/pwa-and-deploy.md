@@ -6,7 +6,7 @@
 
 - 配信先は Netlify の無料プラン。Project visibility を **Private** にして、チームオーナー（自分）が Netlify にログインしているときだけ見られるようにする。
 - ビルドは手元で行い、できた `app/dist/` を netlify-cli で上げる（`npm run deploy`）。Netlify 側でビルドしないので、Rust・wasm-pack を Netlify に用意しなくてよく、GitHub のリポジトリへの権限も Netlify に渡さない。
-- 配信するのはアプリ本体（HTML・JS・WASM・アイコン・manifest・Service Worker）だけ。ROM・ゲーム内セーブ・セーブステートは端末の中だけにあり、配信先には置かない（設計書 6 章）。
+- 配信するのはアプリ本体（HTML・JS・WASM・アイコン・manifest・Service Worker）と内蔵ソフト（`games/` の自作ゲームの ROM と目録。`docs/builtin-games.md`）だけ。利用者が追加した ROM・ゲーム内セーブ・セーブステートは端末の中だけにあり、配信先には置かない（設計書 6 章）。
 
 ## ファイル
 
@@ -34,12 +34,12 @@
 
 - 入れる: `dist/` のファイル全部（`index.html` は `./` として）。いまは JS・WASM・アイコン・manifest。
 - 入れない: `sw.js` 自身、ソースマップ、Netlify の `_headers` / `_redirects`。
-- `dist/` に `*.gb` / `*.gbc` / `*.rbs` / `*.sav` / `*.srm` があったらビルドを失敗させる。
+- `dist/` に `*.gb` / `*.gbc` / `*.rbs` / `*.sav` / `*.srm` があったらビルドを失敗させる。例外は内蔵ソフトの ROM だけで、`dist/builtin/index.json` の目録に載っていて、中身の SHA-256 と大きさが目録と合う `dist/builtin/` の ROM は通して事前キャッシュに入れる（オフラインでも内蔵ソフトを選べる）。
 - 走っている間に取ったものは足さない（キャッシュに入るのは上の一覧だけ）。
 
 ### 要求の扱い
 
-- 同じオリジンの GET だけを扱う。外部の URL・`blob:`・`data:`・POST などには手を出さず、ブラウザに任せる（キャッシュもしない）。ROM・セーブは IndexedDB・localStorage・ファイル選択で扱い、URL で取りに行かないので、そもそも Service Worker を通らない。
+- 同じオリジンの GET だけを扱う。外部の URL・`blob:`・`data:`・POST などには手を出さず、ブラウザに任せる（キャッシュもしない）。利用者の ROM・セーブは IndexedDB・localStorage・ファイル選択で扱い、URL で取りに行かないので、そもそも Service Worker を通らない（内蔵ソフトの ROM だけは `builtin/` から取り、事前キャッシュから出る）。
 - ページ（`index.html`）: まずネットワークに取りに行き、オフラインか 3 秒で返らなければキャッシュの `index.html` を出す。オンラインなら開くたびに最新の版になる。
 - JS・WASM・アイコンなど: キャッシュにあればそれを、無ければネットワークから。名前にハッシュが付いているので、版が変われば別の名前になる。
 - キャッシュとの照合は `ignoreVary: true` で行う。サーバーが `Vary: Origin` を返すと、`<script type="module">`（Origin 付きの要求）がキャッシュと一致せず、オフラインで起動できなくなったため（`vite preview` で起きた）。

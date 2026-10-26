@@ -42,11 +42,13 @@ const ScreenMessage = ({
     onStart,
     onAddRom,
     onOpenMenu,
+    hasBuiltinGames,
 }: {
     status: SessionStatus;
     onStart: () => void;
     onAddRom: () => void;
     onOpenMenu: () => void;
+    hasBuiltinGames: boolean;
 }) => {
     switch (status.kind) {
         case "booting":
@@ -54,7 +56,28 @@ const ScreenMessage = ({
         case "loading":
             return <p className="gbc-overlay-text">{status.message}</p>;
         case "noRom":
-            return (
+            // 内蔵ソフトがあれば、ファイルを用意しなくてもメニューから選べる
+            return hasBuiltinGames ? (
+                <div className="gbc-overlay-panel">
+                    <p className="gbc-overlay-text">遊ぶソフトを選んでください</p>
+                    <div className="gbc-overlay-actions">
+                        <button
+                            type="button"
+                            className="gbc-overlay-button"
+                            onClick={onOpenMenu}
+                        >
+                            内蔵ソフトから選ぶ
+                        </button>
+                        <button
+                            type="button"
+                            className="gbc-overlay-button gbc-overlay-secondary"
+                            onClick={onAddRom}
+                        >
+                            ROM を追加
+                        </button>
+                    </div>
+                </div>
+            ) : (
                 <div className="gbc-overlay-panel">
                     <p className="gbc-overlay-text">ROM が登録されていません</p>
                     <button
@@ -386,6 +409,9 @@ const App = () => {
                                 onStart={session.startReadyRom}
                                 onAddRom={openRomPicker}
                                 onOpenMenu={openMenu}
+                                hasBuiltinGames={
+                                    session.builtinGames.length > 0
+                                }
                             />
                             {session.flash && (
                                 <div
@@ -474,6 +500,7 @@ const App = () => {
             <MenuSheet open={menuOpen} onClose={closeMenu}>
                 <RomMenu
                     roms={roms}
+                    builtinGames={session.builtinGames}
                     currentRomId={currentRomId}
                     busy={busy}
                     gameActive={running}

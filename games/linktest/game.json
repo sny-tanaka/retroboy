@@ -1,0 +1,7 @@
+{
+    "name": "通信テスト",
+    "description": "通信ケーブルのつながりを確かめる自作のテスト。2 台で片方は A、もう片方は B を押す。",
+    "system": "gbc",
+    "rom": "../../testroms/link/linktest.gb",
+    "builtBy": "scripts/build-testroms.sh"
+}

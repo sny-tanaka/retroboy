@@ -33,6 +33,14 @@ import {
     useLinkStatus,
 } from "../link/linkStore";
 import {
+    BUILTIN_GAMES,
+    builtinLastRomId,
+    carryOverSave,
+    findBuiltinBySha,
+    loadBuiltinRom,
+    resolveBuiltinLastRomId,
+} from "../storage/builtinGames";
+import {
     getLastRomId,
     getSaveState,
     importRom,
@@ -296,6 +304,13 @@ const useRomSession = () => {
             waitForTap(rom);
             return;
         }
+        // 内蔵ソフトは、版が上がっていたら前の版のゲーム内セーブを写してから読み込む
+        // （前の ROM の書き込み待ちを先に書き出しておく）
+        const builtin = findBuiltinBySha(rom.id);
+        if (builtin) {
+            flushPendingSaves();
+            carryOverSave(builtin);
+        }
         const result = loadIntoCore(rom, audioContext.sampleRate);
         if ("error" in result) {
             setStatus({
@@ -332,24 +347,32 @@ const useRomSession = () => {
         }
     };
 
+    // 利用者が追加した ROM。内蔵ソフトと同じ中身のもの（通信テストをファイルで追加していた等）は
+    // 内蔵ソフトの欄に出るので、ここには出さない（どちらから選んでも ID が同じなのでセーブも同じ）
     const refreshRoms = async (): Promise<void> => {
         try {
-            setRoms(await listRoms());
+            setRoms(
+                (await listRoms()).filter(rom => !findBuiltinBySha(rom.id)),
+            );
         } catch (err) {
             setNotice(messageOf(err, "ROM の一覧を読み込めませんでした。"));
         }
     };
 
-    // 保存済みの ROM を読んで、開始できるなら始める（できなければタップ待ち）
+    // 保存済みの ROM か内蔵ソフトを読んで、開始できるなら始める（できなければタップ待ち）
     const openRom = async (id: string, remember: boolean): Promise<void> => {
         const isCurrent = beginRequest();
         setStatus({ kind: "loading", message: "ROM を読み込み中…" });
+        const builtin = findBuiltinBySha(id);
         try {
-            const rom = await loadRom(id);
+            const rom = builtin
+                ? await loadBuiltinRom(builtin)
+                : await loadRom(id);
             if (!isCurrent()) return;
             if (remember) {
-                // 記録できなくても遊ぶのは続けられる
-                setLastRomId(id).catch((err: unknown) =>
+                // 記録できなくても遊ぶのは続けられる。内蔵ソフトは版が上がっても開けるよう "builtin:<id>" で覚える
+                const lastRomId = builtin ? builtinLastRomId(builtin) : id;
+                setLastRomId(lastRomId).catch((err: unknown) =>
                     setNotice(messageOf(err, "前回の ROM を記録できませんでした。")),
                 );
             }
@@ -373,8 +396,12 @@ const useRomSession = () => {
         try {
             const [lastRomId] = await Promise.all([getLastRomId(), refreshRoms()]);
             if (!isCurrent()) return;
-            if (lastRomId) {
-                await openRom(lastRomId, false);
+            // 内蔵ソフトは "builtin:<id>" で覚えている。いまの版の ID にする（無くなっていれば null）
+            const builtinRomId =
+                lastRomId === null ? null : resolveBuiltinLastRomId(lastRomId);
+            const romId = builtinRomId === undefined ? lastRomId : builtinRomId;
+            if (romId) {
+                await openRom(romId, false);
             } else {
                 setStatus({ kind: "noRom" });
             }
@@ -595,6 +622,7 @@ const useRomSession = () => {
         playing,
         paused,
         roms,
+        builtinGames: BUILTIN_GAMES,
         notice,
         dismissNotice: () => setNotice(null),
         storageStatus,

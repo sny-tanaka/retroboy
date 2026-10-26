@@ -4,6 +4,8 @@ import { execSync } from "node:child_process";
 import react from "@vitejs/plugin-react";
 import { defineConfig, type Plugin } from "vite";
 
+import { builtinGames } from "./plugins/builtinGames.ts";
+
 // git の結果。git が無い・リポジトリの外などで失敗したら null
 const git = (args: string): string | null => {
     try {
@@ -53,7 +55,7 @@ const versionFile = (): Plugin => ({
 });
 
 export default defineConfig({
-    plugins: [react(), versionFile()],
+    plugins: [react(), versionFile(), builtinGames()],
     define: {
         __APP_VERSION__: JSON.stringify(appVersion),
         __BUILD_ID__: JSON.stringify(buildId),

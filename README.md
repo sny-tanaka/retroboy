@@ -14,6 +14,9 @@
 - `scripts/build-wasm.sh` … コアを WASM にビルドして `app/src/core/` に出力する（生成物は git に入れない）。最初に `scripts/prepare-core.sh` で本家を用意してパッチを当てる。
 - `scripts/prepare-core.sh` / `scripts/export-core-patches.sh` … 本家の用意とパッチ当て／`core/upstream/` の変更をパッチに書き出す。
 - `scripts/test-core.sh` … コアの試験（本家の単体試験と `core/tests/`）。
+- `games/` … アプリに内蔵して配信する自作ゲーム（ゲームごとに `games/<id>/` にソース・ビルドの仕方・`game.json`〔表示名・説明・GB/GBC・ROM の場所〕・できた ROM）。いまは通信テスト（`games/linktest/`。ROM は `testroms/link/`）だけ。決まりと仕組みは `docs/builtin-games.md`。
+  - `app/plugins/builtinGames.ts` … ビルドのときに `games/` を読み、内蔵ソフトの目録をアプリに入れ、ROM と目録を `app/dist/builtin/` に出す vite のプラグイン。
+- `scripts/build-games.sh` … `games/` のゲームのうち Makefile があるものをビルドする（GBDK-2020 など。`--check` でコミットしてある ROM と合っているかを確かめる）。
 - `testroms/` … 自作のテスト ROM（RGBDS のソースと、できた ROM）。いまは通信ケーブルのテスト ROM（`testroms/link/link.asm` と `linktest.gb`）。
 - `scripts/make-icons.sh` … アイコンの元画像から `app/public/icons/` の PNG を作る。
 - `netlify.toml` … Netlify での配信の設定（公開するフォルダとヘッダー）。
@@ -21,16 +24,20 @@
 - `docs/upstream-notes.md` … 本家のセーブ RAM・セーブステート・WASM API の調査メモと、このアプリでの変更点。
 - `docs/future-work.md` … 今後の課題（ゲーム内セーブのバックアップなど）。
 - `docs/link-cable-design.md` … 通信ケーブル（同じ Wi-Fi の 2 台での交換・対戦）の設計。
+- `docs/builtin-games.md` … 内蔵ソフト（自作ゲームをアプリに入れて配る）の決まり・ビルド・セーブの扱い。
 
-ROM ファイルはリポジトリにもビルド成果物にも入れない（市販のゲームの ROM は著作権の問題があるため。`.gitignore` で `*.gb` / `*.gbc` を除き、`app/dist` に ROM が入るとビルドが止まる）。例外は自作のテスト ROM だけで、`testroms/` に置いてリポジトリに入れる（`app/` の外なので配信物には入らない）。
+市販のゲームの ROM はリポジトリにもビルド成果物にも入れない（著作権の問題があるため。`.gitignore` で `*.gb` / `*.gbc` を除き、`app/dist` に ROM が入るとビルドが止まる）。例外は自作の ROM だけ:
+
+- `testroms/` の自作のテスト ROM はリポジトリに入れる。
+- `games/` の自作ゲームの ROM はリポジトリに入れ、アプリに内蔵して配信する（「内蔵ソフト」）。`app/dist` で通すのは `app/dist/builtin/index.json` の目録に載っていて中身の SHA-256 が合う `app/dist/builtin/` の ROM だけで、それ以外の ROM が入ればこれまで通りビルドが止まる（`docs/builtin-games.md`）。
 
 ## 使い方
 
 画面はゲームボーイカラー風の本体で、iPhone の縦持ちで使う。
 
-1. 初回はゲーム画面の中の「ROM を追加」で ROM ファイル（`.gb` / `.gbc`）を選ぶ。ROM は端末内（IndexedDB）に保存され、そのまま始まる。
+1. 初回はゲーム画面の中の「内蔵ソフトから選ぶ」でアプリに入っている自作のソフトを選ぶか、「ROM を追加」で ROM ファイル（`.gb` / `.gbc`）を選ぶ。追加した ROM は端末内（IndexedDB）に保存され、そのまま始まる。内蔵ソフトはファイルを用意しなくても遊べ、オフラインでも選べる（削除はできない）。
 2. 次からは開くと前回の ROM が読み込まれるので、ゲーム画面の「タップして開始」を押す（iPhone は音を鳴らすのにタップが要るため）。
-3. ほかの ROM は「メニュー」の一覧で選ぶか、「＋ ROM を追加」で足す。遊んでいる途中でも切り替えられる。
+3. ほかのソフトは「メニュー」の「内蔵ソフト」「追加した ROM」の一覧で選ぶか、「＋ ROM を追加」で足す。遊んでいる途中でも切り替えられる。
 
 操作は「メニュー」の「操作」で、両手・片手 A・片手 B から選ぶ（既定は両手）。選んだものは端末に覚え、次の起動でも使う。遊んでいる途中で切り替えてもよい（切り替えると押していたボタンは全部離す）。画面の上の「メニュー」から「ロード」までと、キーボードの操作はどれでも同じ。
 
@@ -63,7 +70,7 @@ ROM ファイルはリポジトリにもビルド成果物にも入れない（�
 
 | 部品 | 内容 |
 |---|---|
-| 画面の下の「メニュー」 | 一時停止と再開、通信ケーブル（つなぐ・切る）、ROM の一覧と切り替え・追加、操作の配置、セーブステートのファイルの書き出しと読み込み、保存の状態（永続化・使用量）、アプリのバージョン |
+| 画面の下の「メニュー」 | 一時停止と再開、通信ケーブル（つなぐ・切る）、内蔵ソフトと追加した ROM の一覧と切り替え・追加、操作の配置、セーブステートのファイルの書き出しと読み込み、保存の状態（永続化・使用量）、アプリのバージョン |
 | 倍速（「▶▶ ×1」） | 押すたびに ×1 → ×1.5 → ×2 → ×1 と速さが変わり、いまの速さが出る。倍速の間は、音は高さを変えずにテンポだけ速くなる。速さは覚えない（起動したとき・ROM を始めたときは ×1）。端末が追いつかないときは、その分だけ遅くなる |
 | 「セーブ」 | いまの状態（セーブステート）とそのときのゲーム画面を端末内にすぐ保存し、「セーブしました」を一瞬出す。枠は ROM ごとに 1 つで、押すたびに上書きする。ゲームは止まらない |
 | 「ロード」 | 確認のあと、その ROM の端末内のセーブに戻す（いまの進みは上書きされる）。確認には、セーブした日時と、セーブしたときのゲーム画面を出す（画面を残すようにする前のセーブは日時だけ）。まだセーブしていない ROM では押せない |
@@ -76,10 +83,14 @@ ROM ファイルはリポジトリにもビルド成果物にも入れない（�
 
 | もの | 場所 |
 |---|---|
-| ROM 本体と名前（ID は中身の SHA-256）、前回の ROM | IndexedDB `retroboy-snap` の `roms` / `settings` |
+| 追加した ROM 本体と名前（ID は中身の SHA-256）、前回の ROM（内蔵ソフトなら `builtin:<id>`） | IndexedDB `retroboy-snap` の `roms` / `settings` |
+| 内蔵ソフトの ROM（アプリと一緒に配られる。IndexedDB には入れない） | Service Worker のキャッシュ（`builtin/`） |
+| 内蔵ソフトの、前に遊んだ版（版が上がったときにゲーム内セーブを引き継ぐのに使う） | localStorage `builtinSave:<内蔵ソフトの id>` |
 | 「セーブ」で保存したセーブステートと、そのときのゲーム画面（160x144 の PNG）。ROM ごとに 1 つ | IndexedDB `retroboy-snap` の `saveStates`（キーは ROM の ID） |
 | ゲーム内セーブ（セーブ RAM・RTC）。ROM ごとに分かれる | localStorage `sram:<ROM の ID>` / `rtc:<ROM の ID>` |
 | 操作の配置（両手・片手 A・片手 B） | localStorage `controlLayout` |
+
+内蔵ソフトの ID も中身の SHA-256 なので、セーブは版ごとに分かれる。版が上がったときは、前の版のゲーム内セーブだけを新しい版に写す（セーブステートは写さない。`docs/builtin-games.md`）。
 
 ゲーム内セーブは 10 秒ごとにまとめて書き（変化が無ければ書かない）、画面を離れるとき（ホームに戻す・閉じる）にはすぐ書く。サイトデータの削除などで消えるので、バックアップは今後の課題（`docs/future-work.md`）。
 
@@ -91,6 +102,7 @@ ROM の ID の計算（`crypto.subtle`）は HTTPS か `localhost` でしか動�
 - rustup で入れた Rust と `wasm32-unknown-unknown` ターゲット
 - wasm-pack
 - RGBDS（テスト ROM のビルド。テスト ROM はリポジトリに入っているので、ソースを直すときだけ要る。入っていれば `npm run check` がソースと ROM が合っているかも確かめる）
+- GBDK-2020（`games/` の自作ゲームのビルド。ROM はリポジトリに入っているので、ゲームのソースを直すときだけ要る。入っていれば `npm run check` がソースと ROM が合っているかも確かめる）
 
 macOS（Homebrew）の例:
 
@@ -99,6 +111,15 @@ brew install rustup wasm-pack rgbds
 # rustup は keg-only なので PATH に入らない。scripts/build-wasm.sh は自動で rustup 側を優先する
 "$(brew --prefix rustup)/bin/rustup" default stable
 "$(brew --prefix rustup)/bin/rustup" target add wasm32-unknown-unknown
+```
+
+GBDK-2020 は Homebrew に無いので、[GitHub Releases](https://github.com/gbdk-2020/gbdk-2020/releases) から macOS 用の tar.gz（Apple Silicon なら arm64 のもの）を落として `~/.local/gbdk` に展開する（別の場所なら環境変数 `GBDK_HOME` で指す）:
+
+```sh
+mkdir -p ~/.local
+tar -xzf ~/Downloads/gbdk-macos-arm64.tar.gz -C ~/.local   # ~/.local/gbdk ができる
+xattr -dr com.apple.quarantine ~/.local/gbdk               # macOS に止められないように
+~/.local/gbdk/bin/lcc -v
 ```
 
 Homebrew の `rust` が入っていても消す必要はない（`rust` には wasm32 ターゲットが無いので、ビルドには rustup 側の cargo を使う）。
@@ -125,13 +146,14 @@ cd app
 npm run check
 ```
 
-WASM のビルド → コアの試験（テスト ROM のビルドを含む）→ 型チェック → lint → 本番ビルドを順に実行し、どれかが失敗したらそこで止まる。
+WASM のビルド → コアの試験（テスト ROM のビルドを含む）→ 自作ゲームの ROM がソースと合っているか（`scripts/build-games.sh --check`）→ 型チェック → lint → 本番ビルドを順に実行し、どれかが失敗したらそこで止まる。
 
 その他のコマンド（`app/` で実行）:
 
 | コマンド | 内容 |
 |---|---|
 | `npm run check` | WASM のビルド・コアの試験・型チェック・lint・本番ビルドをまとめて実行 |
+| `npm run build:games` | `games/` の自作ゲームの ROM をビルドする（`../scripts/build-games.sh`。`npm run build:games -- <id>` で 1 つだけ） |
 | `npm run test:core` | コアの試験（`../scripts/test-core.sh`。本家の単体試験と、通信テスト ROM で 2 台を直結する試験） |
 | `npm run typecheck` | 型チェック |
 | `npm run lint` | ESLint |
@@ -218,7 +240,7 @@ cargo update --manifest-path core/Cargo.toml   # 本家の依存が変わった�
 
 ## テスト ROM
 
-自作のテスト ROM は `testroms/` に、RGBDS のソースとできた ROM を一緒に入れている（自作なので入れてよい。`.gitignore` は `testroms/` の中の ROM だけを例外にしている）。ソースを直したら RGBDS（`brew install rgbds`）で作り直し、ROM もコミットする。
+自作のテスト ROM は `testroms/` に、RGBDS のソースとできた ROM を一緒に入れている（自作なので入れてよい。`.gitignore` は `testroms/` と `games/` の中の ROM だけを例外にしている）。ソースを直したら RGBDS（`brew install rgbds`）で作り直し、ROM もコミットする。
 
 ```sh
 ./scripts/build-testroms.sh           # testroms/link/linktest.gb を作り直す（途中の生成物は testroms/build/）
