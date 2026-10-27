@@ -14,16 +14,18 @@ import { type ScreenSize, useScreenSize } from "./useScreenSize";
 
 // gbc.css と共有する寸法（px）。ゲーム画面の大きさの計算に使う
 const BEZEL_PAD_X = 10;
+// 画面を横幅いっぱいにするとき（GBA）の、画面枠の左右の縁。画面を広く取るため細くする
+const BEZEL_PAD_X_FILL = 3;
 const BEZEL_PAD_TOP = 18;
 const STRIP_HEIGHT = 52;
 const BODY_GAP = 8;
 // ぷにコン・A/B・SELECT/START に最低限取っておく高さ
 const CONTROLS_MIN_HEIGHT = 236;
 
-const RESERVE = {
-    width: BEZEL_PAD_X * 2,
-    height: BEZEL_PAD_TOP + STRIP_HEIGHT + BODY_GAP + CONTROLS_MIN_HEIGHT,
-};
+const RESERVE_HEIGHT =
+    BEZEL_PAD_TOP + STRIP_HEIGHT + BODY_GAP + CONTROLS_MIN_HEIGHT;
+const RESERVE = { width: BEZEL_PAD_X * 2, height: RESERVE_HEIGHT };
+const RESERVE_FILL = { width: BEZEL_PAD_X_FILL * 2, height: RESERVE_HEIGHT };
 
 export interface GbcBodyProps extends GbButtonHandlers {
     /** 操作部の配置。既定は twohand */
@@ -34,6 +36,11 @@ export interface GbcBodyProps extends GbButtonHandlers {
     readonly screen: ReactNode;
     /** ゲーム画面のドットの数。既定は Game Boy の 160x144（GBA は 240x160） */
     readonly screenDots?: ScreenSize;
+    /**
+     * true のとき、画面を整数倍にせず横幅いっぱいに広げ（縦横の比は保つ）、画面枠の左右の縁を細くする（GBA）。
+     * 既定は false（整数倍。GB / GBC）
+     */
+    readonly screenFill?: boolean;
     /** 画面の上に重ねるもの（「タップして開始」など） */
     readonly screenOverlay?: ReactNode;
     /** 画面の隅に重ねるもの（速さの表示）。押せない */
@@ -126,6 +133,7 @@ export const GbcBody = ({
     gestureBTrigger,
     screen,
     screenDots,
+    screenFill = false,
     screenOverlay,
     screenCorner,
     shoulderButtons = false,
@@ -147,11 +155,16 @@ export const GbcBody = ({
 }: GbcBodyProps) => {
     useBlockIosGestures();
     const bodyRef = useRef<HTMLDivElement>(null);
-    const screenSize = useScreenSize(bodyRef, RESERVE, screenDots);
+    const screenSize = useScreenSize(
+        bodyRef,
+        screenFill ? RESERVE_FILL : RESERVE,
+        screenDots,
+        screenFill ? "fill" : "integer",
+    );
     const handlers = { onButtonDown, onButtonUp };
 
     const style = {
-        "--gbc-bezel-pad-x": `${BEZEL_PAD_X}px`,
+        "--gbc-bezel-pad-x": `${screenFill ? BEZEL_PAD_X_FILL : BEZEL_PAD_X}px`,
         "--gbc-bezel-pad-top": `${BEZEL_PAD_TOP}px`,
         "--gbc-strip-height": `${STRIP_HEIGHT}px`,
         "--gbc-body-gap": `${BODY_GAP}px`,

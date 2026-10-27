@@ -7,7 +7,7 @@
 //   開始・読み込み中・エラーはダイアログではなくゲーム画面の中に出す。セーブステートの処理は
 //   emulator/saveState.ts に、状態とロジック（ROM の保存・自動読み込み・起動）は session/useRomSession.ts に切り出した。
 //   モードの選択は外し、ROM ヘッダの CGB フラグか拡張子 .gbc で決めるようにした。
-//   GBA（mGBA）のゲームでは、画面を 240x160 にし、L・R を出し、倍速ボタンを隠す。画面の隅に速さを出せる。
+//   GBA（mGBA）のゲームでは、画面を 240x160 にして横幅いっぱいに広げ、L・R を出し、倍速ボタンを隠す。画面の隅に速さを出せる。
 import {
     lazy,
     type RefObject,
@@ -417,6 +417,7 @@ const App = () => {
                     />
                 }
                 screenDots={gba ? GBA_DOTS : undefined}
+                screenFill={gba}
                 screenCorner={perf && <PerfOverlay snapshot={perf} />}
                 shoulderButtons={gba}
                 canChangeSpeed={!gba}

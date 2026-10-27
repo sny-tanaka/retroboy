@@ -12,19 +12,34 @@ export interface ScreenSize {
 const GB_DOTS: ScreenSize = { width: GB_WIDTH, height: GB_HEIGHT };
 
 /**
- * 入る範囲で、1 ドットが実際の画面の整数個のピクセルになる一番大きい大きさ（ドットの幅がそろう）。
- * 拡大は image-rendering: pixelated なので、ぼけない。
+ * 画面の拡大のしかた。
+ * - integer: 入る範囲で、1 ドットが実際の画面の整数個のピクセルになる一番大きい大きさ（ドットの幅がそろう。GB / GBC）
+ * - fill: 縦横の比を保って、入る範囲いっぱい（GBA。整数倍でないので、ドットの幅が 1 ピクセルずつ不ぞろいになる）。
+ *   大きさは実際の画面のピクセルの境目にそろえる（縁がにじまないように）
+ * どちらも拡大は image-rendering: pixelated なので、ぼけない。
  */
+export type ScreenScaling = "integer" | "fill";
+
 export const fitScreen = (
     availableWidth: number,
     availableHeight: number,
     devicePixelRatio: number,
     dots: ScreenSize = GB_DOTS,
+    scaling: ScreenScaling = "integer",
 ): ScreenSize => {
     const scale = Math.max(
         0,
         Math.min(availableWidth / dots.width, availableHeight / dots.height),
     );
+    if (scaling === "fill") {
+        const height = Math.floor(dots.height * scale * devicePixelRatio);
+        // 縦をピクセルの境目にそろえ、横は縦から比で決めて切り捨てる（入る範囲を超えない。比のずれは 1 ピクセル未満）
+        const width = Math.floor((height * dots.width) / dots.height);
+        return {
+            width: width / devicePixelRatio,
+            height: height / devicePixelRatio,
+        };
+    }
     if (scale * devicePixelRatio < 1) {
         return { width: dots.width * scale, height: dots.height * scale };
     }
@@ -43,6 +58,7 @@ export const useScreenSize = (
     ref: RefObject<HTMLElement | null>,
     reserve: { readonly width: number; readonly height: number },
     dots: ScreenSize = GB_DOTS,
+    scaling: ScreenScaling = "integer",
 ): ScreenSize => {
     const [size, setSize] = useState<ScreenSize>(dots);
     const { width: dotWidth, height: dotHeight } = dots;
@@ -67,6 +83,7 @@ export const useScreenSize = (
                     innerHeight - reserve.height,
                     window.devicePixelRatio || 1,
                     { width: dotWidth, height: dotHeight },
+                    scaling,
                 ),
             );
         };
@@ -75,7 +92,7 @@ export const useScreenSize = (
         const observer = new ResizeObserver(measure);
         observer.observe(element);
         return () => observer.disconnect();
-    }, [reserve.width, reserve.height, dotWidth, dotHeight]);
+    }, [reserve.width, reserve.height, dotWidth, dotHeight, scaling]);
 
     return size;
 };
