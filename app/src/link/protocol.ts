@@ -1,42 +1,54 @@
-// 通信ケーブルで 2 台が送り合うメッセージと、そのバイト列への変換（docs/link-cable-design.md 3.1）。
+// 通信ケーブルで 2 台が送り合うメッセージと、そのバイト列への変換（docs/link-cable-design.md 3.1・8.3）。
 // 道（transport.ts）はバイト列（ArrayBuffer）をそのまま順番どおりに届ける。
 //
-// 時刻はどれも、コアの通信用の時刻（4MHz の T サイクル。linkClock()）。2^53 までは number で正確に持てる。
+// 時刻はどれも、コアの通信用の時刻（Game Boy は 4MHz の T サイクル、GBA は 16.78MHz のサイクル。linkCore.ts）。
+// 2^53 までは number で正確に持てる。
 // epoch は、両方のコアが時刻を 0 からそろえ直すたびに 1 増える番号。古い epoch の TIME・XFER・REPLY は捨てる
 // （そろえ直す前に送られて、まだ届いていなかったもの）。
 
-// 約束の版。メッセージの形を変えたら上げる（違う版どうしはつながない）
-export const PROTOCOL_VERSION = 1;
+import type { LinkSystem } from "./linkCore";
+
+// 約束の版。メッセージの形を変えたら上げる（違う版どうしはつながない）。
+// 2: GBA の通信のため、転送の中身を 32 ビットにしてビットの数を足し、so を足し、start に機械の種類を入れた
+export const PROTOCOL_VERSION = 2;
 
 export type LinkMessage =
     // つながった直後に 1 回。アプリの版は知らせるだけ
     | { readonly type: "hello"; readonly protocol: number; readonly app: string }
     // コアを通信につないだ（時刻を 0 にした）。受けた側も自分のコアの時刻を 0 にして epoch をそろえる。
-    // title は相手の画面に出す ROM のタイトル
+    // title は相手の画面に出す ROM のタイトル、system は機械の種類（GBA は GBA とだけ通信する）
     | {
           readonly type: "start";
           readonly epoch: number;
           readonly title: string;
-          readonly cgb: boolean;
+          readonly system: LinkSystem;
       }
     // コアを通信から外した（ROM を止めた・切り替えた）
     | { readonly type: "stop" }
     // 「時刻 time まで進んだ」
     | { readonly type: "time"; readonly epoch: number; readonly time: number }
-    // 親機が送り始めた。相手は at に受け取る
+    // 親機が送り始めた。相手は at に受け取る。data は bits ビット（Game Boy は 8、GBA は 8 か 32）
     | {
           readonly type: "xfer";
           readonly epoch: number;
           readonly seq: number;
           readonly at: number;
-          readonly byte: number;
+          readonly data: number;
+          readonly bits: number;
       }
     // 子機の返事
     | {
           readonly type: "reply";
           readonly epoch: number;
           readonly seq: number;
-          readonly byte: number;
+          readonly data: number;
+      }
+    // SO の高さが時刻 at に変わった（GBA のノーマルモード。相手は自分の SI にする）
+    | {
+          readonly type: "so";
+          readonly epoch: number;
+          readonly at: number;
+          readonly level: number;
       }
     // 一時停止した・戻った（相手の画面に「相手が一時停止しています」を出すため）
     | { readonly type: "pause" }
@@ -59,11 +71,19 @@ const TYPE_CODES = {
     ping: 9,
     pong: 10,
     bye: 11,
+    so: 12,
 } as const satisfies Record<LinkMessage["type"], number>;
 
 const TYPE_NAMES = Object.fromEntries(
     Object.entries(TYPE_CODES).map(([name, code]) => [code, name]),
 ) as Record<number, LinkMessage["type"]>;
+
+// start の機械の種類（u8）
+const SYSTEM_CODES = { gb: 0, cgb: 1, gba: 2 } as const satisfies Record<
+    LinkSystem,
+    number
+>;
+const SYSTEM_NAMES = ["gb", "cgb", "gba"] as const satisfies readonly LinkSystem[];
 
 // 文字列は長さ（u16）＋ UTF-8
 const textEncoder = new TextEncoder();
@@ -142,7 +162,7 @@ export const encodeMessage = (message: LinkMessage): ArrayBuffer => {
             return writer
                 .u32(message.epoch)
                 .text(message.title)
-                .u8(message.cgb ? 1 : 0)
+                .u8(SYSTEM_CODES[message.system])
                 .finish();
         case "time":
             return writer.u32(message.epoch).f64(message.time).finish();
@@ -151,13 +171,20 @@ export const encodeMessage = (message: LinkMessage): ArrayBuffer => {
                 .u32(message.epoch)
                 .u32(message.seq)
                 .f64(message.at)
-                .u8(message.byte)
+                .u32(message.data)
+                .u8(message.bits)
                 .finish();
         case "reply":
             return writer
                 .u32(message.epoch)
                 .u32(message.seq)
-                .u8(message.byte)
+                .u32(message.data)
+                .finish();
+        case "so":
+            return writer
+                .u32(message.epoch)
+                .f64(message.at)
+                .u8(message.level)
                 .finish();
         case "ping":
         case "pong":
@@ -178,13 +205,12 @@ export const decodeMessage = (buffer: ArrayBuffer): LinkMessage | null => {
         switch (type) {
             case "hello":
                 return { type, protocol: reader.u16(), app: reader.text() };
-            case "start":
-                return {
-                    type,
-                    epoch: reader.u32(),
-                    title: reader.text(),
-                    cgb: reader.u8() !== 0,
-                };
+            case "start": {
+                const epoch = reader.u32();
+                const title = reader.text();
+                const system = SYSTEM_NAMES[reader.u8()];
+                return system ? { type, epoch, title, system } : null;
+            }
             case "time":
                 return { type, epoch: reader.u32(), time: reader.f64() };
             case "xfer":
@@ -193,14 +219,22 @@ export const decodeMessage = (buffer: ArrayBuffer): LinkMessage | null => {
                     epoch: reader.u32(),
                     seq: reader.u32(),
                     at: reader.f64(),
-                    byte: reader.u8(),
+                    data: reader.u32(),
+                    bits: reader.u8(),
                 };
             case "reply":
                 return {
                     type,
                     epoch: reader.u32(),
                     seq: reader.u32(),
-                    byte: reader.u8(),
+                    data: reader.u32(),
+                };
+            case "so":
+                return {
+                    type,
+                    epoch: reader.u32(),
+                    at: reader.f64(),
+                    level: reader.u8(),
                 };
             case "ping":
             case "pong":

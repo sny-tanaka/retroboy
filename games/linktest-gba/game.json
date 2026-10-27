@@ -1,0 +1,7 @@
+{
+    "name": "GBA 通信テスト",
+    "description": "GBA の通信ケーブル（ノーマルモード）を確かめる自作のテスト。2 台で片方は A、もう片方は B を押す。SELECT=8/32 ビット START=クロック",
+    "system": "gba",
+    "rom": "linktest-gba.gba",
+    "toolchain": "llvm"
+}

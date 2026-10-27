@@ -4,8 +4,19 @@
 import createMgbaCore, { type MgbaModule } from "./core/mgbaCore.js";
 import wasmUrl from "./core/mgbaCore.wasm?url";
 
+import type { LinkCore } from "../link/linkCore";
+
 export const GBA_WIDTH = 240;
 export const GBA_HEIGHT = 160;
+
+// GBA の CPU のサイクル（通信用の時刻の単位）
+const GBA_CYCLES_PER_SECOND = 16 * 1024 * 1024;
+// 1 フレーム（228 行 × 1232 サイクル）
+const GBA_FRAME_CYCLES = 280896;
+// gba_link_take_event の種類（mgba-glue.c の LINK_EVENT_*）
+const GBA_LINK_TRANSFER = 0;
+const GBA_LINK_REPLY = 1;
+const GBA_LINK_SO = 2;
 
 // mGBA のボタンのビット（mgba-glue.c の gba_set_keys）
 export const GBA_KEY_BITS: Readonly<Record<string, number>> = {
@@ -77,6 +88,64 @@ export class GbaCore {
             module.HEAPF32.slice(left, left + count),
             module.HEAPF32.slice(right, right + count),
         ];
+    }
+
+    /** linkStep が 1 フレームの区切り（STEP_AUDIO）を返したあとに、そのフレームの音を取り出す（runFrame と同じ形） */
+    takeFrameAudio(): [Float32Array, Float32Array] {
+        const module = this.module;
+        const count = module._gba_take_audio();
+        const left = module._gba_audio_left() >> 2;
+        const right = module._gba_audio_right() >> 2;
+        return [
+            module.HEAPF32.slice(left, left + count),
+            module.HEAPF32.slice(right, right + count),
+        ];
+    }
+
+    /** 通信ケーブルの口（mgba-glue.c の gba_link_*。link/linkCore.ts の LinkCore の形にする） */
+    linkCore(releaseKey: (key: string) => void): LinkCore {
+        const module = this.module;
+        return {
+            cyclesPerMs: GBA_CYCLES_PER_SECOND / 1000,
+            frameCycles: GBA_FRAME_CYCLES,
+            setConnected: connected =>
+                module._gba_link_set_connected(connected ? 1 : 0),
+            step: limit => module._gba_link_step(limit),
+            clock: () => module._gba_link_clock(),
+            takeEvent: () => {
+                const kind = module._gba_link_take_event();
+                switch (kind) {
+                    case GBA_LINK_TRANSFER:
+                        return {
+                            kind: "transfer",
+                            seq: module._gba_link_event_seq() >>> 0,
+                            at: module._gba_link_event_at(),
+                            data: module._gba_link_event_data() >>> 0,
+                            bits: module._gba_link_event_bits(),
+                        };
+                    case GBA_LINK_REPLY:
+                        return {
+                            kind: "reply",
+                            seq: module._gba_link_event_seq() >>> 0,
+                            data: module._gba_link_event_data() >>> 0,
+                        };
+                    case GBA_LINK_SO:
+                        return {
+                            kind: "so",
+                            at: module._gba_link_event_at(),
+                            level: module._gba_link_event_bits(),
+                        };
+                    default:
+                        return null;
+                }
+            },
+            deliverTransfer: (seq, at, data, bits) =>
+                module._gba_link_deliver_transfer(seq, at, data, bits),
+            deliverReply: (seq, data) =>
+                module._gba_link_deliver_reply(seq, data),
+            deliverSo: (at, level) => module._gba_link_deliver_so(at, level),
+            releaseKey,
+        };
     }
 
     /** いまの絵を canvas に描く */

@@ -16,7 +16,8 @@
 //   npx playwright install webkit        # まだ入っていなければ
 //   (cd <リポジトリ>/app && npm run dev)  # 別の端末で
 //   node <リポジトリ>/scripts/link-e2e.mjs webkit http://localhost:5173 /tmp/linkpw/out
-// 環境変数 PASTE=1 を付けると、カメラの代わりにコードの貼り付けでつなぐ。
+// 環境変数 PASTE=1 を付けると、カメラの代わりにコードの貼り付けでつなぐ。ROM=gba を付けると、GBA の通信テスト
+// （games/linktest-gba/）で試す（docs/link-cable-design.md 8.5）。
 import { mkdirSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
@@ -30,9 +31,15 @@ const [engineName = "webkit", origin = "http://localhost:5173", outRoot = "link-
 const engine = engineName === "chromium" ? chromium : webkit;
 const out = join(outRoot, engineName);
 mkdirSync(out, { recursive: true });
+const gba = process.env.ROM === "gba";
 const rom = readFileSync(
-    join(dirname(fileURLToPath(import.meta.url)), "../testroms/link/linktest.gb"),
+    join(
+        dirname(fileURLToPath(import.meta.url)),
+        gba ? "../games/linktest-gba/linktest-gba.gba" : "../testroms/link/linktest.gb",
+    ),
 );
+// 通信用の時刻の 1 秒あたりの数（Game Boy は T サイクル、GBA は CPU のサイクル）
+const cyclesPerSecond = gba ? 16777216 : 4194304;
 
 // ページの中で動かす: getUserMedia を、__setFakeCamera で渡した画像を描いた canvas の映像に差し替える
 const fakeCamera = () => {
@@ -100,7 +107,11 @@ for (const name of ["A", "B"]) {
     await frames[name]
         .locator("input[type=file]")
         .first()
-        .setInputFiles({ name: "linktest.gbc", mimeType: "application/octet-stream", buffer: rom });
+        .setInputFiles({
+            name: gba ? "linktest-gba.gba" : "linktest.gbc",
+            mimeType: "application/octet-stream",
+            buffer: rom,
+        });
 }
 await page.waitForTimeout(1500);
 for (const name of ["A", "B"]) {
@@ -181,9 +192,10 @@ try {
         const before = await frameOf("A").evaluate(() => window.__retroboyLink());
         await page.waitForTimeout(5000);
         const after = await frameOf("A").evaluate(() => window.__retroboyLink());
-        const speed = (after.clock - before.clock) / 5 / 4194304;
+        const speed = (after.clock - before.clock) / 5 / cyclesPerSecond;
+        const transfers = (after.transfers - before.transfers) / 5;
         console.log(
-            `  往復 ${after.status.rttMs}ms、速さ ${speed.toFixed(3)}、相手のゲーム ${after.status.peer.title}`,
+            `  往復 ${after.status.rttMs}ms、速さ ${speed.toFixed(3)}、1 秒に ${transfers} 回の転送、相手のゲーム ${after.status.peer.title}`,
         );
         await shot("A", "5-a-linked.png");
         await shot("B", "6-b-linked.png");

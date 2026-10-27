@@ -46,7 +46,7 @@ interface RomMenuProps {
     readonly link: LinkStatus | null;
     readonly onCloseLink: () => void;
     readonly onOpenLinkConnect: () => void;
-    /** いま読み込んでいる ROM の本体（無ければ null）。GBA では通信ケーブルを使えない */
+    /** いま読み込んでいる ROM の本体（無ければ null） */
     readonly system: RomSystem | null;
     /** 速さの表示（画面の隅の fps）を出しているか。本体ごとに覚える */
     readonly perfShown: boolean;
@@ -214,23 +214,11 @@ export const RomMenu = ({
                 disabled={!gameActive}
                 onTogglePause={onTogglePause}
             />
-            {system === "gba" ? (
-                <section className="gbc-menu-section">
-                    <h2 className="gbc-menu-heading">通信ケーブル</h2>
-                    <button type="button" className="gbc-menu-item" disabled>
-                        通信ケーブルでつなぐ
-                    </button>
-                    <p className="gbc-menu-note">
-                        GBA では使えません（倍速も使えません）。
-                    </p>
-                </section>
-            ) : (
-                <LinkMenu
-                    link={link}
-                    onCloseLink={onCloseLink}
-                    onOpenConnect={onOpenLinkConnect}
-                />
-            )}
+            <LinkMenu
+                link={link}
+                onCloseLink={onCloseLink}
+                onOpenConnect={onOpenLinkConnect}
+            />
             <BuiltinGameMenu
                 games={builtinGames}
                 currentRomId={currentRomId}

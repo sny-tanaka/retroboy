@@ -10,15 +10,21 @@ import {
     scheduleRamWrite,
     setSaveSnapshotter,
 } from "../emulator/cartridgeEffects";
+import type { LinkCore } from "../link/linkCore";
 import { GBA_KEY_BITS, GbaCore, loadMgba } from "./gbaCore";
 
 let core: GbaCore | null = null;
+// 通信ケーブルの口（link/linkCore.ts）。core と一緒に作り直す
+let linkCore: LinkCore | null = null;
 let romId: string | null = null;
 let keys = 0;
 // 最後に書き込み待ちにした（または読み込んだ）ゲーム内セーブ。同じなら書かない
 let lastSave: Uint8Array | null = null;
 
 export const getGbaCore = (): GbaCore | null => core;
+
+/** いまの GBA のゲームを通信ケーブルにつなぐ口。動いていなければ null */
+export const getGbaLinkCore = (): LinkCore | null => linkCore;
 
 const sameBytes = (a: Uint8Array, b: Uint8Array): boolean => {
     if (a.length !== b.length) return false;
@@ -59,6 +65,7 @@ export const startGba = async (
     const created = GbaCore.create(module, rom, save, sampleRate);
     if ("error" in created) return created;
     core = created;
+    linkCore = created.linkCore(releaseGbaKey);
     romId = id;
     keys = 0;
     lastSave = save;
@@ -73,6 +80,7 @@ export const stopGba = (): void => {
     setSaveSnapshotter(null);
     core.unload();
     core = null;
+    linkCore = null;
     romId = null;
     keys = 0;
     lastSave = null;

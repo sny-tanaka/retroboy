@@ -32,10 +32,10 @@ import {
 } from "../emulator/saveState";
 import useAudioSync from "../emulator/useAudioSync";
 import { useKeyListeners } from "../emulator/useKeyListeners";
-import { startGba, stopGba } from "../gba/gbaSession";
+import { getGbaLinkCore, startGba, stopGba } from "../gba/gbaSession";
 import useGbaLoop from "../gba/useGbaLoop";
+import { retroboyLinkCore } from "../link/linkCore";
 import {
-    closeLink,
     setLocalGame,
     setLocalPlaying,
     useLinkStatus,
@@ -330,12 +330,11 @@ const useRomSession = () => {
         sampleRate: number,
         isCurrent: () => boolean,
     ): Promise<void> => {
-        // Game Boy のコアを止める。通信ケーブルは GBA では使えないので、つないでいれば切る
+        // Game Boy のコアを止める（通信ケーブルからも外す。つながりは切らず、GBA を始めたらつなぎ直す）
         flushPendingSaves();
         setLocalGame(null);
         resetEmulator();
         setActiveRomId(null);
-        closeLink();
         setStatus({ kind: "loading", message: "GBA のエミュレーターを準備中…" });
         const result = await startGba(rom.id, rom.data, sampleRate, isCurrent);
         if (result === "cancelled") return;
@@ -353,6 +352,11 @@ const useRomSession = () => {
         currentRomRef.current = rom;
         setSpeed(1);
         resetPerfStats();
+        // mGBA でゲームを始めたあとで、通信ケーブルにつなぐ（つながっていれば時刻を 0 からそろえ直す）
+        const linkCore = getGbaLinkCore();
+        if (linkCore) {
+            setLocalGame({ title: result.title, system: "gba", core: linkCore });
+        }
         setStatus({
             kind: "running",
             rom: toSummary(rom),
@@ -399,7 +403,8 @@ const useRomSession = () => {
         // コアを作り直したあとで、通信ケーブルにつなぐ（つながっていれば時刻を 0 からそろえ直す）
         setLocalGame({
             title: result.title,
-            cgb: detectMode(rom) === "CGB",
+            system: detectMode(rom) === "CGB" ? "cgb" : "gb",
+            core: retroboyLinkCore,
         });
         setStatus({
             kind: "running",

@@ -24,6 +24,25 @@ export interface MgbaModule {
     _gba_state_buffer(): number;
     _gba_state_alloc(size: number): number;
     _gba_state_load(size: number): number;
+    // 通信ケーブル（mgba-glue.c のいちばん下）
+    _gba_link_set_connected(connected: number): void;
+    _gba_link_clock(): number;
+    _gba_link_step(limit: number): number;
+    _gba_take_audio(): number;
+    _gba_link_take_event(): number;
+    _gba_link_event_seq(): number;
+    _gba_link_event_at(): number;
+    /** u32 だが JS には符号つきで届く（>>> 0 で直す） */
+    _gba_link_event_data(): number;
+    _gba_link_event_bits(): number;
+    _gba_link_deliver_transfer(
+        seq: number,
+        at: number,
+        data: number,
+        bits: number,
+    ): void;
+    _gba_link_deliver_so(at: number, level: number): void;
+    _gba_link_deliver_reply(seq: number, data: number): void;
 }
 
 export interface MgbaModuleOptions {

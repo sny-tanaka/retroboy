@@ -16,7 +16,7 @@ games/
     build/              … ビルドの途中の生成物（git に入れない）
 ```
 
-いまは通信テスト（`games/linktest/`）・テイマーズライフの GBA 版（`games/tamers-life-gba/`、Rust の agb 製、作っているところ）・GBA ベンチ（`games/gba-bench/`）の 3 つ。テイマーズライフの GB 版（`games/tamers-life/`、GBDK-2020 製）は GBA 版に切り替えたので内蔵ソフトから外した（決定 #143）。フォルダは設計書（`docs/`）と道具（`tools/`）の置き場として残してある（下の「外し方」）。通信テストの ROM とソースは `testroms/link/` にある（RGBDS 製。コアの試験 `core/tests/link.rs` もこの ROM を使うので動かしていない）。
+いまは通信テスト（`games/linktest/`）・テイマーズライフの GBA 版（`games/tamers-life-gba/`、Rust の agb 製、作っているところ）・GBA ベンチ（`games/gba-bench/`）・GBA 通信テスト（`games/linktest-gba/`、C を llvm で。`docs/link-cable-design.md` 8.5）の 4 つ。テイマーズライフの GB 版（`games/tamers-life/`、GBDK-2020 製）は GBA 版に切り替えたので内蔵ソフトから外した（決定 #143）。フォルダは設計書（`docs/`）と道具（`tools/`）の置き場として残してある（下の「外し方」）。通信テストの ROM とソースは `testroms/link/` にある（RGBDS 製。コアの試験 `core/tests/link.rs` もこの ROM を使うので動かしていない）。
 
 ### game.json
 

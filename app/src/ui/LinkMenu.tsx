@@ -18,9 +18,12 @@ export const describeLink = (link: LinkStatus): string => {
             }
             break;
         case "open":
-            return link.peer.kind === "running"
-                ? `相手のゲーム: ${link.peer.title}`
-                : "相手のゲームはまだ始まっていません。";
+            if (link.peer.kind !== "running") {
+                return "相手のゲームはまだ始まっていません。";
+            }
+            return link.peer.mismatch
+                ? `相手のゲーム: ${link.peer.title}（${link.peer.system === "gba" ? "GBA" : "GB・GBC"}）。GBA と GB・GBC のあいだでは通信できません。`
+                : `相手のゲーム: ${link.peer.title}`;
     }
     return "";
 };

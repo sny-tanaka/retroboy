@@ -9,16 +9,19 @@
 // start を送る。受けた側もコアの時刻を 0 にする。epoch で、そろえる前のメッセージを見分けて捨てる。
 //
 // 音で進む作り（useAudioSync.ts）からは、つないでいる間だけ step() を回してもらう。止まったら setTimeout を
-// 予約せずに抜け、相手のメッセージが届いたら onWake で呼び直してもらう。
+// 予約せずに抜け、相手のメッセージが届いたら onWake で呼び直してもらう。GBA は useGbaLoop.ts が同じように回す。
+//
+// コアは Game Boy（Retro Boy）でも GBA（mGBA）でもよい（linkCore.ts の LinkCore。docs/link-cable-design.md 8 章）。
+// 時刻の単位はコアごとに違うので、ms で決めた長さはそのときのコアの cyclesPerMs で直す。
 import {
-    linkClock,
-    linkDeliverReply,
-    linkDeliverTransfer,
-    linkSetConnected,
-    linkStep,
-    linkTakeEvent,
-    releaseKey,
-} from "../core/retroboyCore";
+    type LinkCore,
+    type LinkSystem,
+    sameLinkFamily,
+    STEP_AUDIO,
+    STEP_EVENT,
+    STEP_LIMIT,
+    STEP_WAITING_REPLY,
+} from "./linkCore";
 import {
     decodeMessage,
     encodeMessage,
@@ -27,8 +30,6 @@ import {
 } from "./protocol";
 import type { LinkTransport, TransportState } from "./transport";
 
-const T_CYCLES_PER_MS = 4194.304;
-
 // 相手より先に進んでよい時間（ゲーム内）。往復の時間の半分＋TIME の間隔より長ければ、通信していない間は
 // 止まらない。長いほど、子機が親機の送り始めより先に進んでいて遅れて受け取ることが増える（ゲームの待ちより
 // 短く）。タブ 2 つで遅れを入れて測り（docs/link-cable-design.md 3.6）、16ms では往復 50ms ほどで通信して
@@ -36,9 +37,6 @@ const T_CYCLES_PER_MS = 4194.304;
 export const WINDOW_MS = 32;
 // TIME を送る間隔（ゲーム内）。1 回の linkStep もこの長さで区切る
 const TIME_INTERVAL_MS = 4;
-const TIME_INTERVAL = TIME_INTERVAL_MS * T_CYCLES_PER_MS;
-// 1 フレーム（T サイクル。倍速モードでも画面は同じ速さなので同じ）。ボタンを離すのを遅らせる長さ
-const FRAME = 70224;
 
 // 止まってからこれだけたったら「相手を待っています」を出す
 const WAITING_NOTICE_MS = 300;
@@ -48,22 +46,16 @@ const PING_INTERVAL_MS = 1000;
 // 状態を見直す間隔（待ち・応答なし・ping）
 const TICK_MS = 250;
 
-// linkStep の戻り値（core/patches/0003）
-const STEP_AUDIO = 0;
-const STEP_EVENT = 1;
-const STEP_WAITING_REPLY = 2;
-const STEP_LIMIT = 3;
-// linkTakeEvent の種類
-const EVENT_TRANSFER = 0;
-
 export type PeerGame =
     // まだ何も知らない・相手のゲームが止まっている
     | { readonly kind: "none" }
     | {
           readonly kind: "running";
           readonly title: string;
-          readonly cgb: boolean;
+          readonly system: LinkSystem;
           readonly paused: boolean;
+          /** 通信できない機械の組（GBA と GB・GBC）。進みは合わせない */
+          readonly mismatch: boolean;
       };
 
 export type LinkPhase =
@@ -88,11 +80,13 @@ export interface LinkStatus {
 
 export interface LocalGame {
     readonly title: string;
-    readonly cgb: boolean;
+    readonly system: LinkSystem;
+    /** このゲームを動かしているコア */
+    readonly core: LinkCore;
 }
 
 export type StepOutcome =
-    // 音のバッファが 1 つできた（playAudioSamples が呼ばれた）
+    // 音のバッファが 1 つできた（Game Boy は playAudioSamples が呼ばれた。GBA は 1 フレーム進んだ）
     | "audio"
     // 区切りまで進んだ。続けて呼んでよい
     | "continue"
@@ -109,8 +103,8 @@ export class LinkSession {
     };
     private readonly listeners = new Set<() => void>();
 
-    // 自分のコアが通信につながっている（ゲームが動いていて、道が開いている）
-    private coreActive = false;
+    // 通信につないでいる自分のコア（ゲームが動いていて、道が開いている間）
+    private activeCore: LinkCore | null = null;
     private localGame: LocalGame | null = null;
     private playing = false;
     private epoch = 0;
@@ -118,6 +112,8 @@ export class LinkSession {
     private lastSentTime = 0;
     private stalledSince: number | null = null;
     private stallCount = 0;
+    // 送った・受け取った転送の数（試験で 1 秒あたりの転送の数を測るため）
+    private transferCount = 0;
     private stalledMs = 0;
     // つないでいる間に押したボタンと、そのときのコアの時刻
     private readonly pressedAt = new Map<string, number>();
@@ -126,7 +122,7 @@ export class LinkSession {
     private lastReceivedAt = performance.now();
     private lastPingAt = 0;
     private readonly ticker: ReturnType<typeof setInterval>;
-    private readonly window: number;
+    private readonly windowMs: number;
 
     /** 止まっている間に相手のメッセージが届いた。音のループが設定し、続きを走らせる */
     onWake: (() => void) | null = null;
@@ -137,7 +133,7 @@ export class LinkSession {
         // 相手より先に進んでよい時間（ms、ゲーム内）。試験で変えるときだけ渡す（?linkWindow=）
         windowMs: number = WINDOW_MS,
     ) {
-        this.window = windowMs * T_CYCLES_PER_MS;
+        this.windowMs = windowMs;
         transport.onMessage = data => this.receive(data);
         transport.onStateChange = state => this.handleTransportState(state);
         this.ticker = setInterval(() => this.tick(), TICK_MS);
@@ -155,17 +151,26 @@ export class LinkSession {
 
     /** 音のループがコアを linkStep で進めるか（道が開いていて、自分のゲームが動いている） */
     get stepping(): boolean {
-        return this.coreActive;
+        return this.activeCore !== null;
     }
 
     /** 自分のゲームが始まった（info）・止まった（null）。ゲームを始めるたびに、コアを作り直したあとで呼ぶ */
     setLocalGame(info: LocalGame | null): void {
         this.localGame = info;
+        const peer = this.statusValue.peer;
+        if (info && peer.kind === "running") {
+            this.update({
+                peer: {
+                    ...peer,
+                    mismatch: !sameLinkFamily(info.system, peer.system),
+                },
+            });
+        }
         if (info && this.statusValue.phase.kind === "open") {
             this.activateCore();
-        } else if (!info && this.coreActive) {
+        } else if (!info && this.activeCore) {
             this.resetKeys();
-            this.coreActive = false;
+            this.activeCore = null;
             this.stalledSince = null;
             this.send({ type: "stop" });
             this.update({ waiting: false });
@@ -191,14 +196,20 @@ export class LinkSession {
      * 止まったら、止まる前に自分の時刻を送ってから "stalled" を返す
      */
     step(): StepOutcome {
-        const peerLimit = this.peerTime + this.window;
-        const start = linkClock();
-        const result = linkStep(Math.min(peerLimit, start + TIME_INTERVAL));
+        const core = this.activeCore;
+        if (!core) return "continue";
+        const timeInterval = TIME_INTERVAL_MS * core.cyclesPerMs;
+        // 通信できない機械の組なら、相手を待たない（ゲームはつながっていないのと同じに見える）
+        const peerLimit = this.peerMismatch()
+            ? Infinity
+            : this.peerTime + this.windowMs * core.cyclesPerMs;
+        const start = core.clock();
+        const result = core.step(Math.min(peerLimit, start + timeInterval));
         this.sendEvents();
         this.releaseDueKeys();
-        const now = linkClock();
+        const now = core.clock();
         if (now > start) this.markProgress();
-        if (now - this.lastSentTime >= TIME_INTERVAL) this.sendTime(now);
+        if (now - this.lastSentTime >= timeInterval) this.sendTime(now);
         switch (result) {
             case STEP_AUDIO:
                 return "audio";
@@ -214,9 +225,9 @@ export class LinkSession {
 
     /** ボタンを押した（emulator/gameKeys.ts）。離すのを遅らせるために、押した時刻を覚える */
     notePress(key: string): void {
-        if (!this.coreActive) return;
+        if (!this.activeCore) return;
         this.pendingReleases.delete(key);
-        this.pressedAt.set(key, linkClock());
+        this.pressedAt.set(key, this.activeCore.clock());
     }
 
     /**
@@ -226,21 +237,23 @@ export class LinkSession {
     deferRelease(key: string): boolean {
         const pressedAt = this.pressedAt.get(key);
         this.pressedAt.delete(key);
-        if (!this.coreActive || pressedAt === undefined) return false;
-        const releaseAt = pressedAt + FRAME;
-        if (linkClock() >= releaseAt) return false;
+        const core = this.activeCore;
+        if (!core || pressedAt === undefined) return false;
+        const releaseAt = pressedAt + core.frameCycles;
+        if (core.clock() >= releaseAt) return false;
         this.pendingReleases.set(key, releaseAt);
         return true;
     }
 
     // 遅らせていたボタンのうち、時刻が来たもの（force なら全部）を離す
     private releaseDueKeys(force = false): void {
-        if (this.pendingReleases.size === 0) return;
-        const now = force ? Infinity : linkClock();
+        const core = this.activeCore;
+        if (this.pendingReleases.size === 0 || !core) return;
+        const now = force ? Infinity : core.clock();
         this.pendingReleases.forEach((releaseAt, key) => {
             if (now >= releaseAt) {
                 this.pendingReleases.delete(key);
-                releaseKey(key);
+                core.releaseKey(key);
             }
         });
     }
@@ -255,13 +268,15 @@ export class LinkSession {
     stats(): {
         readonly clock: number;
         readonly stalls: number;
+        readonly transfers: number;
         readonly stalledMs: number;
         readonly pressedKeys: readonly string[];
         readonly pendingReleases: readonly string[];
     } {
         return {
-            clock: this.coreActive ? linkClock() : 0,
+            clock: this.activeCore?.clock() ?? 0,
             stalls: this.stallCount,
+            transfers: this.transferCount,
             pressedKeys: [...this.pressedAt.keys()],
             pendingReleases: [...this.pendingReleases.keys()],
             stalledMs: Math.round(
@@ -296,15 +311,24 @@ export class LinkSession {
     }
 
     private sendEvents(): void {
+        const core = this.activeCore;
+        if (!core) return;
+        const epoch = this.epoch;
         for (;;) {
-            const event = linkTakeEvent();
+            const event = core.takeEvent();
             if (!event) return;
-            const [kind, seq, at, byte] = event;
-            this.send(
-                kind === EVENT_TRANSFER
-                    ? { type: "xfer", epoch: this.epoch, seq, at, byte }
-                    : { type: "reply", epoch: this.epoch, seq, byte },
-            );
+            switch (event.kind) {
+                case "transfer":
+                    this.transferCount += 1;
+                    this.send({ type: "xfer", epoch, ...event });
+                    break;
+                case "reply":
+                    this.send({ type: "reply", epoch, ...event });
+                    break;
+                case "so":
+                    this.send({ type: "so", epoch, ...event });
+                    break;
+            }
         }
     }
 
@@ -313,8 +337,8 @@ export class LinkSession {
         if (!this.localGame) return;
         this.epoch += 1;
         this.resetKeys();
-        linkSetConnected(true);
-        this.coreActive = true;
+        this.activeCore = this.localGame.core;
+        this.activeCore.setConnected(true);
         this.peerTime = 0;
         this.lastSentTime = 0;
         this.stalledSince = null;
@@ -322,7 +346,7 @@ export class LinkSession {
             type: "start",
             epoch: this.epoch,
             title: this.localGame.title,
-            cgb: this.localGame.cgb,
+            system: this.localGame.system,
         });
         this.send({ type: this.playing ? "resume" : "pause" });
     }
@@ -349,16 +373,22 @@ export class LinkSession {
                     peer: {
                         kind: "running",
                         title: message.title,
-                        cgb: message.cgb,
+                        system: message.system,
                         paused: false,
+                        mismatch:
+                            this.localGame !== null &&
+                            !sameLinkFamily(
+                                this.localGame.system,
+                                message.system,
+                            ),
                     },
                 });
                 if (message.epoch > this.epoch) {
                     this.epoch = message.epoch;
-                    if (this.coreActive) {
+                    if (this.activeCore) {
                         // 相手に合わせて時刻を 0 からやり直す（途中の転送は捨てる）
                         this.resetKeys();
-                        linkSetConnected(true);
+                        this.activeCore.setConnected(true);
                         this.peerTime = 0;
                         this.lastSentTime = 0;
                     }
@@ -386,16 +416,28 @@ export class LinkSession {
                 }
                 return;
             case "xfer":
-                if (this.coreActive && message.epoch === this.epoch) {
-                    linkDeliverTransfer(message.seq, message.at, message.byte);
+                if (this.activeCore && this.acceptsData(message.epoch)) {
+                    this.transferCount += 1;
+                    this.activeCore.deliverTransfer(
+                        message.seq,
+                        message.at,
+                        message.data,
+                        message.bits,
+                    );
                     // 子機として受け取って返事ができていれば、すぐ送る
                     this.sendEvents();
                     this.wake();
                 }
                 return;
             case "reply":
-                if (this.coreActive && message.epoch === this.epoch) {
-                    linkDeliverReply(message.seq, message.byte);
+                if (this.activeCore && this.acceptsData(message.epoch)) {
+                    this.activeCore.deliverReply(message.seq, message.data);
+                    this.wake();
+                }
+                return;
+            case "so":
+                if (this.activeCore && this.acceptsData(message.epoch)) {
+                    this.activeCore.deliverSo(message.at, message.level);
                     this.wake();
                 }
                 return;
@@ -411,6 +453,17 @@ export class LinkSession {
                 this.finish("bye");
                 return;
         }
+    }
+
+    // 相手が通信できない機械のゲームを動かしている（GBA と GB・GBC）
+    private peerMismatch(): boolean {
+        const peer = this.statusValue.peer;
+        return peer.kind === "running" && peer.mismatch;
+    }
+
+    // 相手の転送・返事をコアに渡してよいか（同じ epoch で、通信できる機械の組）
+    private acceptsData(epoch: number): boolean {
+        return epoch === this.epoch && !this.peerMismatch();
     }
 
     private wake(): void {
@@ -435,11 +488,11 @@ export class LinkSession {
     private finish(reason: "bye" | "local" | "lost" | "version"): void {
         if (this.statusValue.phase.kind === "closed") return;
         clearInterval(this.ticker);
-        if (this.coreActive) {
+        if (this.activeCore) {
             // ゲームはそのまま続ける（コアはつながっていない状態に戻り、親機は 0xFF を受け取る）
             this.resetKeys();
-            linkSetConnected(false);
-            this.coreActive = false;
+            this.activeCore.setConnected(false);
+            this.activeCore = null;
         }
         this.transport.onMessage = null;
         this.transport.onStateChange = null;
