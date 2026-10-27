@@ -27,19 +27,24 @@ for arg in "$@"; do
   esac
 done
 
-if [ "${#ids[@]}" -eq 0 ]; then
-  for dir in "$ROOT"/games/*/; do
-    if [ -f "$dir/game.json" ]; then
-      ids+=("$(basename "$dir")")
-    fi
-  done
-fi
-
 # game.json の値（無ければ空）
 field() {
   node -e 'const v = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"))[process.argv[2]]; console.log(v ?? "")' \
     "$1" "$2"
 }
+
+# id を指定しないときは全部。ただし "builtin": false のゲーム（内蔵ソフトから外したもの）は飛ばす
+if [ "${#ids[@]}" -eq 0 ]; then
+  for dir in "$ROOT"/games/*/; do
+    if [ -f "$dir/game.json" ]; then
+      if [ "$(field "$dir/game.json" builtin)" = "false" ]; then
+        echo "games/$(basename "$dir"): 内蔵ソフトから外してある（\"builtin\": false）ので飛ばします。"
+        continue
+      fi
+      ids+=("$(basename "$dir")")
+    fi
+  done
+fi
 
 # GBA の ROM を作る LLVM（games/<id>/Makefile と同じ場所を見る）
 has_llvm() {

@@ -118,17 +118,23 @@ const makeGame = (
     };
 };
 
-// games/ の下の game.json があるフォルダを、名前の順に読む
+// games/ の下の game.json があるフォルダを、名前の順に読む。"builtin": false のもの（内蔵ソフトから外したゲーム）は読まない
 const loadGames = async (): Promise<LoadedGame[]> => {
     const entries = await readdir(GAMES_DIR, { withFileTypes: true }).catch(() => []);
     const ids = [];
     for (const entry of entries) {
         if (!entry.isDirectory()) continue;
-        const hasJson = await readFile(join(GAMES_DIR, entry.name, "game.json")).then(
-            () => true,
-            () => false,
+        const json = await readFile(join(GAMES_DIR, entry.name, "game.json"), "utf8").then(
+            text => text,
+            () => null,
         );
-        if (hasJson) ids.push(entry.name);
+        if (json === null) continue;
+        const parsed = JSON.parse(json) as Record<string, unknown>;
+        if (parsed.builtin !== undefined && typeof parsed.builtin !== "boolean") {
+            fail(entry.name, `"builtin" は true か false にしてください。`);
+        }
+        if (parsed.builtin === false) continue;
+        ids.push(entry.name);
     }
     const games = await Promise.all(ids.sort().map(loadGame));
     const seen = new Map<string, string>();

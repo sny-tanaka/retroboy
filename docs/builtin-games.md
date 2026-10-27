@@ -16,7 +16,7 @@ games/
     build/              … ビルドの途中の生成物（git に入れない）
 ```
 
-いまは通信テスト（`games/linktest/`）・テイマーズライフ（`games/tamers-life/`、GBDK-2020 製）・テイマーズライフの GBA 版（`games/tamers-life-gba/`、Rust の agb 製、作っているところ）・GBA ベンチ（`games/gba-bench/`）の 4 つ。通信テストの ROM とソースは `testroms/link/` にある（RGBDS 製。コアの試験 `core/tests/link.rs` もこの ROM を使うので動かしていない）。
+いまは通信テスト（`games/linktest/`）・テイマーズライフの GBA 版（`games/tamers-life-gba/`、Rust の agb 製、作っているところ）・GBA ベンチ（`games/gba-bench/`）の 3 つ。テイマーズライフの GB 版（`games/tamers-life/`、GBDK-2020 製）は GBA 版に切り替えたので内蔵ソフトから外した（決定 #143）。フォルダは設計書（`docs/`）と道具（`tools/`）の置き場として残してある（下の「外し方」）。通信テストの ROM とソースは `testroms/link/` にある（RGBDS 製。コアの試験 `core/tests/link.rs` もこの ROM を使うので動かしていない）。
 
 ### game.json
 
@@ -41,6 +41,7 @@ games/
 | `builtBy` | 任意 | Makefile が無いゲームの作り方のメモ（`scripts/build-games.sh` が出すだけ） |
 | `toolchain` | 任意 | `gbdk` なら GBDK-2020、`llvm` なら Homebrew の llvm と lld（GBA。`games/gba-bench/README.md`）、`agb` なら llvm と lld に加えて rustup の nightly と rust-src（GBA。Rust の agb。`games/tamers-life-gba/README.md`）が要る。無いときは `scripts/build-games.sh --check` が確かめずに飛ばす |
 | `saveFormat` | 任意 | ゲーム内セーブの形式の番号（既定 1）。下の「版が上がったときのセーブ」 |
+| `builtin` | 任意 | `false` なら内蔵ソフトに入れない（既定 `true`）。下の「外し方」 |
 
 ## ビルド
 
@@ -120,3 +121,12 @@ ROM の ID は利用者の ROM と同じく中身の SHA-256 なので、ゲー�
 2. `./scripts/build-games.sh <id>` で ROM を作る。
 3. `cd app && npm run dev` で開き（開発サーバーは無音。音も確かめるときは `?sound=1` を付ける）、メニューの「内蔵ソフト」に出ることと動くことを確かめる。
 4. ソースと ROM をコミットする（`.gitignore` は `games/` の中の `*.gb` / `*.gbc` を例外にしてある）。
+
+## 外し方
+
+フォルダ（ソース・設計書・道具・ROM）は残したまま、アプリの内蔵ソフトから外すときは、game.json に `"builtin": false` を足す。
+
+- `app/plugins/builtinGames.ts` が読まなくなる。目録（`virtual:builtin-games`・`dist/builtin/index.json`）にも `dist/builtin/` の ROM にも入らず、メニューの「内蔵ソフト」に出なくなる。
+- `scripts/build-games.sh`（id を指定しないとき）と `--check`、つまり `npm run check` が飛ばす。ツール（GBDK など）を入れなくてもよくなる。`./scripts/build-games.sh <id>` と id を指定すれば、これまで通り作れる。
+- 前にそのゲームを遊んでいた端末: 前回の ROM（`lastRomId`）が `builtin:<id>` のままでも、目録に無いので ROM が選ばれていない状態（「内蔵ソフトから選ぶ」「ROM を追加」）で始まる（`resolveBuiltinLastRomId`）。ゲーム内セーブ（`sram:<ID>`・`builtinSave:<id>`）とセーブステートは消さずに残る。戻せば（`"builtin": false` を消せば）また遊べる。
+- 外したゲームの ROM のファイルは、利用者が「ROM を追加」で選べば、ふつうの ROM として遊べる（ID が同じなので、前の版のセーブもそのまま使える）。

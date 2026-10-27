@@ -17,7 +17,7 @@
 - `scripts/build-wasm.sh` … コアを WASM にビルドして `app/src/core/` に出力する（生成物は git に入れない）。最初に `scripts/prepare-core.sh` で本家を用意してパッチを当てる。
 - `scripts/prepare-core.sh` / `scripts/export-core-patches.sh` … 本家の用意とパッチ当て／`core/upstream/` の変更をパッチに書き出す。引数に `mgba` を付けると mGBA（`mgba/`）で同じことをする。
 - `scripts/test-core.sh` … コアの試験（本家の単体試験と `core/tests/`）。
-- `games/` … アプリに内蔵して配信する自作ゲーム（ゲームごとに `games/<id>/` にソース・ビルドの仕方・`game.json`〔表示名・説明・GB/GBC・ROM の場所〕・できた ROM）。通信テスト（`games/linktest/`。ROM は `testroms/link/`）・テイマーズライフ（`games/tamers-life/`）・テイマーズライフの GBA 版（`games/tamers-life-gba/`。Rust の agb で作っているところ）・GBA の重さを測るデモ（`games/gba-bench/`）。決まりと仕組みは `docs/builtin-games.md`。
+- `games/` … アプリに内蔵して配信する自作ゲーム（ゲームごとに `games/<id>/` にソース・ビルドの仕方・`game.json`〔表示名・説明・GB/GBC・ROM の場所〕・できた ROM）。通信テスト（`games/linktest/`。ROM は `testroms/link/`）・テイマーズライフの GBA 版（`games/tamers-life-gba/`。Rust の agb で作っているところ）・GBA の重さを測るデモ（`games/gba-bench/`）。テイマーズライフの GB 版（`games/tamers-life/`）は内蔵ソフトから外し（game.json の `"builtin": false`）、設計書と道具の置き場として残してある。決まりと仕組みは `docs/builtin-games.md`。
   - `app/plugins/builtinGames.ts` … ビルドのときに `games/` を読み、内蔵ソフトの目録をアプリに入れ、ROM と目録を `app/dist/builtin/` に出す vite のプラグイン。
 - `scripts/build-games.sh` … `games/` のゲームのうち Makefile があるものをビルドする（GBDK-2020 など。`--check` でコミットしてある ROM と合っているかを確かめる）。
 - `testroms/` … 自作のテスト ROM（RGBDS のソースと、できた ROM）。いまは通信ケーブルのテスト ROM（`testroms/link/link.asm` と `linktest.gb`）。
@@ -106,7 +106,7 @@ ROM の ID の計算（`crypto.subtle`）は HTTPS か `localhost` でしか動�
 - rustup で入れた Rust と `wasm32-unknown-unknown` ターゲット
 - wasm-pack
 - RGBDS（テスト ROM のビルド。テスト ROM はリポジトリに入っているので、ソースを直すときだけ要る。入っていれば `npm run check` がソースと ROM が合っているかも確かめる）
-- GBDK-2020 **4.5.0**（`games/` の自作ゲームのビルド。ROM はリポジトリに入っているので、ゲームのソースを直すときだけ要る。入っていれば `npm run check` がソースと ROM が合っているかも確かめる。版が違うとできる ROM が変わり `--check` が止まるので、版をそろえる）
+- GBDK-2020 **4.5.0**（テイマーズライフの GB 版 `games/tamers-life/` のビルド。いまは内蔵ソフトから外してあり、`npm run check` は確かめない。`./scripts/build-games.sh tamers-life` と指定したときだけ要る。版が違うとできる ROM が変わり `--check` が止まるので、版をそろえる）
 - emsdk **5.0.7**（Emscripten。GBA のコアの mGBA を WASM にする `scripts/build-mgba.sh`。`npm run check` が使うので要る）と cmake・ninja
 - LLVM（Homebrew の `llvm` と `lld`。GBA のデモ `games/gba-bench/` とテイマーズライフ（GBA 試作）`games/tamers-life-gba/` のビルド。ROM はリポジトリに入っているので、ソースを直すときだけ要る。版は `games/gba-bench/README.md`）
 - Rust の nightly **nightly-2026-07-20** と rust-src（rustup で入れる。テイマーズライフ（GBA 試作）は Rust の agb **0.25.0** で作る。ROM はリポジトリに入っているので、ソースを直すときだけ要る。入っていれば `npm run check` がソースと ROM が合っているかも確かめる。入れ方は `games/tamers-life-gba/README.md`）
