@@ -10,6 +10,8 @@
 //   saveRam は呼ばれるたびに base64 にせず、その step の終わりに 1 回だけ RAM を写し、base64 にするのは
 //   書き出すときにした（本家も lodash/debounce が呼び出しをまとめていたので重くなかった）。
 //   詳しくは docs/upstream-notes.md。
+//   GBA（mGBA。app/src/gba/gbaSession.ts）のゲーム内セーブも同じキー（sram:<ROM の ID>）・同じ書き出しの間隔で
+//   保存する（readRamFor・scheduleRamWrite・setSaveSnapshotter）。
 import { WasmRTCState } from "../core/retroboyCore";
 
 // 書き込みごとではなく固定の間隔で書き出す。localStorage への書き込みと base64 への変換が、
@@ -74,8 +76,16 @@ const writeNow = (key: string): void => {
     }
 };
 
+// 書き出す前に呼ぶもの（GBA のゲーム内セーブを、変わっていれば書き込み待ちにする）
+let saveSnapshotter: (() => void) | null = null;
+
+export const setSaveSnapshotter = (snapshotter: (() => void) | null): void => {
+    saveSnapshotter = snapshotter;
+};
+
 export const flushPendingSaves = (): void => {
     snapshotRam();
+    saveSnapshotter?.();
     [...pendingWrites.keys()].forEach(writeNow);
 };
 
@@ -180,9 +190,20 @@ const uint8ArrayToBase64 = (bytes: Uint8Array): string => {
     return btoa(binaryString);
 };
 
+/** ROM の ID のゲーム内セーブ（セーブ RAM）を読む（書き込み待ちがあればそれ）。無い・読めなければ null */
+export const readRamFor = (romId: string): Uint8Array | null =>
+    readRamAt(ramStorageKey(romId));
+
+/** ROM の ID のゲーム内セーブを書き込み待ちにする（GBA。value は写してから渡す） */
+export const scheduleRamWrite = (romId: string, value: Uint8Array): void =>
+    scheduleWrite(ramStorageKey(romId), value);
+
 const loadRam = (): Uint8Array | null => {
     const key = resolveKey(ramStorageKey);
-    if (!key) return null;
+    return key ? readRamAt(key) : null;
+};
+
+const readRamAt = (key: string): Uint8Array | null => {
     const pending = pendingWrites.get(key);
     if (pending instanceof Uint8Array) return pending.slice();
     const encodedCartridgeRam = pending ?? localStorage.getItem(key);

@@ -5,6 +5,7 @@
     "type": "module",
     "scripts": {
         "build:wasm": "../scripts/build-wasm.sh",
+        "build:mgba": "../scripts/build-mgba.sh",
         "test:core": "../scripts/test-core.sh",
         "build:games": "../scripts/build-games.sh",
         "dev": "vite",
@@ -12,7 +13,7 @@
         "preview": "vite preview",
         "typecheck": "tsc --noEmit",
         "lint": "eslint .",
-        "check": "npm run build:wasm && npm run test:core && ../scripts/build-games.sh --check && npm run typecheck && npm run lint && vite build && node scripts/generate-sw.mjs",
+        "check": "npm run build:wasm && npm run build:mgba && npm run test:core && ../scripts/build-games.sh --check && npm run typecheck && npm run lint && vite build && node scripts/generate-sw.mjs",
         "deploy": "../scripts/deploy-pages.sh"
     },
     "dependencies": {

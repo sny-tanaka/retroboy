@@ -2,6 +2,10 @@
 // セーブステートは、画面の「セーブ」「ロード」が端末内の枠（ROM ごとに 1 件）を、メニューが .rbs ファイルを使う。
 // 見た目（App.tsx）からはこのフックの戻り値だけを使う。③ で見た目を差し替えるときもここは変えずに済むようにする。
 //
+// GBA の ROM（.gba。storage/romSystem.ts で見分ける）は mGBA（gba/）で動かす。ROM の登録・自動読み込み・
+// ゲーム内セーブ・セーブステートは Game Boy と同じ流れで、倍速と通信ケーブルは使えない（×1 に固定し、つないで
+// いれば切る）。
+//
 // 起動の流れ（設計書 4 章）:
 //   起動 → IndexedDB の lastRomId → その ROM を読む → 「タップして開始」 → initializeEmulator
 // 音で進行する作りで、iOS は AudioContext をユーザー操作の中で作らないと音もループも進まないため、
@@ -19,6 +23,7 @@ import {
     onSaveError,
     setActiveRomId,
 } from "../emulator/cartridgeEffects";
+import { resetPerfStats } from "../emulator/perfStats";
 import {
     applySaveStateBytes,
     captureSaveState,
@@ -27,7 +32,10 @@ import {
 } from "../emulator/saveState";
 import useAudioSync from "../emulator/useAudioSync";
 import { useKeyListeners } from "../emulator/useKeyListeners";
+import { startGba, stopGba } from "../gba/gbaSession";
+import useGbaLoop from "../gba/useGbaLoop";
 import {
+    closeLink,
     setLocalGame,
     setLocalPlaying,
     useLinkStatus,
@@ -52,6 +60,7 @@ import {
     type RomSummary,
     setLastRomId,
 } from "../storage/romDb";
+import { detectRomSystem, type RomSystem } from "../storage/romSystem";
 import {
     requestPersistentStorage,
     type StorageStatus,
@@ -64,10 +73,15 @@ export type SessionStatus =
     | { readonly kind: "noRom" }
     | { readonly kind: "loading"; readonly message: string }
     // ROM は読めた。開始のタップを待つ
-    | { readonly kind: "ready"; readonly rom: RomSummary }
+    | {
+          readonly kind: "ready";
+          readonly rom: RomSummary;
+          readonly system: RomSystem;
+      }
     | {
           readonly kind: "running";
           readonly rom: RomSummary;
+          readonly system: RomSystem;
           readonly title: string;
           readonly paused: boolean;
       }
@@ -141,8 +155,9 @@ const loadIntoCore = (
             error: "ROM のヘッダが壊れているか、Game Boy の ROM ではありません。",
         };
     }
-    // 本家と同じく、ROM を読む前に必ずエミュレーターを作り直す。通信ケーブルからも外す
+    // 本家と同じく、ROM を読む前に必ずエミュレーターを作り直す。通信ケーブルからも外す。GBA が動いていれば止める
     flushPendingSaves();
+    stopGba();
     setLocalGame(null);
     resetEmulator();
     // initializeEmulator の中でセーブ RAM が読まれるので、その前にキーを ROM の ID にする
@@ -230,6 +245,12 @@ const useRomSession = () => {
 
     const playing = status.kind === "running" && !status.paused;
     const paused = status.kind === "running" && status.paused;
+    // いま読み込んでいる ROM の本体（開始待ち・遊んでいる）
+    const system: RomSystem | null =
+        status.kind === "ready" || status.kind === "running"
+            ? status.system
+            : null;
+    const gba = system === "gba";
 
     useKeyListeners(playing);
 
@@ -252,9 +273,10 @@ const useRomSession = () => {
         setWasLinked(linked);
         if (linked) setSpeed(1);
     }
-    const speed: GameSpeed = linked ? 1 : chosenSpeed;
+    // GBA は倍速を使えない
+    const speed: GameSpeed = linked || gba ? 1 : chosenSpeed;
     const cycleSpeed = (): void => {
-        if (linked) return;
+        if (linked || gba) return;
         setSpeed(current => {
             const next = GAME_SPEEDS.indexOf(current) + 1;
             return GAME_SPEEDS[next % GAME_SPEEDS.length];
@@ -264,22 +286,24 @@ const useRomSession = () => {
     // 停止（本家のリセット）。同じ ROM の「タップして開始」に戻る
     const stopGame = (): void => {
         flushPendingSaves();
+        stopGba();
         setLocalGame(null);
         resetEmulator();
         setActiveRomId(null);
         setSpeed(1);
         setStatus(current =>
             current.kind === "running"
-                ? { kind: "ready", rom: current.rom }
+                ? { kind: "ready", rom: current.rom, system: current.system }
                 : current,
         );
     };
 
     const [audioContextRef, startReset] = useAudioSync(
-        playing,
+        playing && !gba,
         stopGame,
         speed,
     );
+    useGbaLoop(playing && gba, audioContextRef);
 
     // ユーザー操作（クリック・タップ）の中で呼ぶ
     const unlockAudio = (): void => {
@@ -293,12 +317,54 @@ const useRomSession = () => {
 
     const waitForTap =(rom: RomRecord): void => {
         currentRomRef.current = rom;
-        setStatus({ kind: "ready", rom: toSummary(rom) });
+        setStatus({
+            kind: "ready",
+            rom: toSummary(rom),
+            system: detectRomSystem(rom.name, rom.data),
+        });
+    };
+
+    // GBA の ROM を始める。mGBA を初めて使うときは読み込むので、少し待つ
+    const startGbaRom = async (
+        rom: RomRecord,
+        sampleRate: number,
+        isCurrent: () => boolean,
+    ): Promise<void> => {
+        // Game Boy のコアを止める。通信ケーブルは GBA では使えないので、つないでいれば切る
+        flushPendingSaves();
+        setLocalGame(null);
+        resetEmulator();
+        setActiveRomId(null);
+        closeLink();
+        setStatus({ kind: "loading", message: "GBA のエミュレーターを準備中…" });
+        const result = await startGba(rom.id, rom.data, sampleRate, isCurrent);
+        if (result === "cancelled") return;
+        if ("error" in result) {
+            setStatus({
+                kind: "error",
+                message: `「${rom.name}」を起動できませんでした。${result.error}`,
+                retry: () => {
+                    unlockAudio();
+                    startRom(rom);
+                },
+            });
+            return;
+        }
+        currentRomRef.current = rom;
+        setSpeed(1);
+        resetPerfStats();
+        setStatus({
+            kind: "running",
+            rom: toSummary(rom),
+            system: "gba",
+            title: result.title,
+            paused: false,
+        });
     };
 
     const startRom = (rom: RomRecord): void => {
         // 途中の読み込みがあれば、その結果で始めたゲームを上書きしないようにする
-        beginRequest();
+        const isCurrent = beginRequest();
         const audioContext = audioContextRef.current;
         if (!audioContext) {
             waitForTap(rom);
@@ -310,6 +376,10 @@ const useRomSession = () => {
         if (builtin) {
             flushPendingSaves();
             carryOverSave(builtin);
+        }
+        if (detectRomSystem(rom.name, rom.data) === "gba") {
+            void startGbaRom(rom, audioContext.sampleRate, isCurrent);
+            return;
         }
         const result = loadIntoCore(rom, audioContext.sampleRate);
         if ("error" in result) {
@@ -325,6 +395,7 @@ const useRomSession = () => {
         }
         currentRomRef.current = rom;
         setSpeed(1);
+        resetPerfStats();
         // コアを作り直したあとで、通信ケーブルにつなぐ（つながっていれば時刻を 0 からそろえ直す）
         setLocalGame({
             title: result.title,
@@ -333,6 +404,7 @@ const useRomSession = () => {
         setStatus({
             kind: "running",
             rom: toSummary(rom),
+            system: "gb",
             title: result.title,
             paused: false,
         });
@@ -619,6 +691,7 @@ const useRomSession = () => {
 
     return {
         status,
+        system,
         playing,
         paused,
         roms,

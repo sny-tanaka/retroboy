@@ -2,3 +2,5 @@ node_modules
 dist
 # scripts/build-wasm.sh が生成する WASM とつなぎの JS
 src/core
+# scripts/build-mgba.sh が生成する GBA のコア（mGBA の WASM とつなぎの JS）
+src/gba/core

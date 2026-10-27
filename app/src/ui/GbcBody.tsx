@@ -8,8 +8,9 @@ import type { ControlLayout } from "./controlLayout";
 import { type GestureBTrigger, GestureControls } from "./GestureControls";
 import { OneHandCluster } from "./OneHandCluster";
 import { PuniPad } from "./PuniPad";
+import { ShoulderButtons } from "./ShoulderButtons";
 import { StartSelect } from "./StartSelect";
-import { useScreenSize } from "./useScreenSize";
+import { type ScreenSize, useScreenSize } from "./useScreenSize";
 
 // gbc.css と共有する寸法（px）。ゲーム画面の大きさの計算に使う
 const BEZEL_PAD_X = 10;
@@ -29,10 +30,18 @@ export interface GbcBodyProps extends GbButtonHandlers {
     readonly layout?: ControlLayout;
     /** 片手 B の B の入れ方（プレビューで比べる用）。既定は both（長押しともう 1 本の指の両方） */
     readonly gestureBTrigger?: GestureBTrigger;
-    /** ゲーム画面。160x144 の canvas を入れる。大きさは枠のほうで合わせる */
+    /** ゲーム画面。canvas を入れる。大きさは枠のほうで合わせる */
     readonly screen: ReactNode;
+    /** ゲーム画面のドットの数。既定は Game Boy の 160x144（GBA は 240x160） */
+    readonly screenDots?: ScreenSize;
     /** 画面の上に重ねるもの（「タップして開始」など） */
     readonly screenOverlay?: ReactNode;
+    /** 画面の隅に重ねるもの（速さの表示）。押せない */
+    readonly screenCorner?: ReactNode;
+    /** GBA の L・R を出す。既定は false */
+    readonly shoulderButtons?: boolean;
+    /** false のとき倍速ボタンを出さない（GBA）。既定は true */
+    readonly canChangeSpeed?: boolean;
     readonly powerOn: boolean;
     readonly paused: boolean;
     /** false のとき、倍速・セーブ・ロードを押せなくする（ゲームが動いていないとき）。既定は true */
@@ -116,7 +125,11 @@ export const GbcBody = ({
     layout = "twohand",
     gestureBTrigger,
     screen,
+    screenDots,
     screenOverlay,
+    screenCorner,
+    shoulderButtons = false,
+    canChangeSpeed = true,
     powerOn,
     paused,
     speed,
@@ -134,7 +147,7 @@ export const GbcBody = ({
 }: GbcBodyProps) => {
     useBlockIosGestures();
     const bodyRef = useRef<HTMLDivElement>(null);
-    const screenSize = useScreenSize(bodyRef, RESERVE);
+    const screenSize = useScreenSize(bodyRef, RESERVE, screenDots);
     const handlers = { onButtonDown, onButtonUp };
 
     const style = {
@@ -171,6 +184,7 @@ export const GbcBody = ({
                         }}
                     >
                         {screen}
+                        {screenCorner}
                         {paused && (
                             <button
                                 type="button"
@@ -207,7 +221,7 @@ export const GbcBody = ({
                                 <LinkIcon />
                                 {linkLabel}
                             </span>
-                        ) : (
+                        ) : canChangeSpeed ? (
                             <button
                                 type="button"
                                 className="gbc-sub-button gbc-speed-button"
@@ -221,7 +235,7 @@ export const GbcBody = ({
                                     ×{speed}
                                 </span>
                             </button>
-                        )}
+                        ) : null}
                         <span className="gbc-strip-spacer" />
                         <button
                             type="button"
@@ -248,6 +262,7 @@ export const GbcBody = ({
                     <span className="gbc-engraving" aria-hidden="true">
                         Retro Boy Snap
                     </span>
+                    {shoulderButtons && <ShoulderButtons {...handlers} />}
                     {layout === "onehand-a" ? (
                         <OneHandCluster {...handlers} />
                     ) : layout === "onehand-b" ? (

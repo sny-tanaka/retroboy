@@ -23,3 +23,10 @@ target/
 !/games/**/*.gb
 !/games/**/*.gbc
 /games/*/build/
+
+# GBA（mGBA）: パッチを当てた本家のコピーとビルドの途中の生成物（scripts/prepare-core.sh mgba・scripts/build-mgba.sh）
+/mgba/upstream/
+/mgba/build/
+# 自作の GBA ROM（games/ の中だけ）は入れてよい。それ以外の .gba は市販 ROM の誤コミットを防ぐために入れない
+*.gba
+!/games/**/*.gba

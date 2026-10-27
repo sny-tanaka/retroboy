@@ -2,6 +2,12 @@
 // 画面の「セーブ」「ロード」で使うセーブステートの枠（saveStates ストア、ROM ごとに 1 件）。
 // ROM はここ以外へは出さない（外部への送信・ログ出力をしない）。
 import { computeRomId } from "./romId";
+import {
+    detectRomSystem,
+    MAX_GB_ROM_SIZE,
+    MAX_GBA_ROM_SIZE,
+    MIN_ROM_SIZE,
+} from "./romSystem";
 
 const DB_NAME = "retroboy-snap";
 // 版 1: roms / settings。版 2: saveStates を足した
@@ -25,7 +31,7 @@ export interface SaveStateRecord {
     readonly romId: string;
     readonly data: ArrayBuffer;
     readonly savedAt: number;
-    // セーブしたときのゲーム画面（160x144 の PNG のバイト列）。ロードの確認に出す。
+    // セーブしたときのゲーム画面（160x144、GBA は 240x160 の PNG のバイト列）。ロードの確認に出す。
     // 足す前のセーブには無い。値に足すだけなので DB の版は上げない。
     // Blob ではなく ArrayBuffer で持つ（古い iOS の Safari は IndexedDB の Blob で失敗することがあるため）
     readonly screenshot?: ArrayBuffer;
@@ -178,19 +184,26 @@ const sameBytes = (a: unknown, b: ArrayBuffer): boolean => {
     return true;
 };
 
-const MIN_ROM_SIZE = 0x150; // カートリッジヘッダの終わり
-const MAX_ROM_SIZE = 8 * 1024 * 1024; // Game Boy の ROM の最大（MBC5 の 8MB）
 
 // ファイルを roms に保存し、lastRomId をそれにする。同じ中身の ROM がすでにあれば
 // 保存し直さず（名前・登録日時も元のまま）、lastRomId だけ更新する。
 export const importRom = (file: File): Promise<RomRecord> =>
     wrap("ROM を端末に保存できませんでした。", async () => {
-        if (file.size < MIN_ROM_SIZE || file.size > MAX_ROM_SIZE) {
+        // GBA の ROM は 32MB まで、Game Boy の ROM は 8MB まで（GBA かは読んでから名前とヘッダで見る）
+        if (file.size < MIN_ROM_SIZE || file.size > MAX_GBA_ROM_SIZE) {
+            throw new RomStorageError(
+                `「${file.name}」は Game Boy・GBA の ROM として大きさが合いません。`,
+            );
+        }
+        const data = await file.arrayBuffer();
+        if (
+            file.size > MAX_GB_ROM_SIZE &&
+            detectRomSystem(file.name, data) !== "gba"
+        ) {
             throw new RomStorageError(
                 `「${file.name}」は Game Boy の ROM として大きさが合いません。`,
             );
         }
-        const data = await file.arrayBuffer();
         const id = await computeRomId(data);
         return withDb(async db => {
             const transaction = db.transaction(

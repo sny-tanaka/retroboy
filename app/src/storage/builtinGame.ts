@@ -3,7 +3,7 @@
 // アプリには virtual:builtin-games として、dist には builtin/index.json として出す。
 // 決まりは docs/builtin-games.md。
 
-export type BuiltinSystem = "gb" | "gbc";
+export type BuiltinSystem = "gb" | "gbc" | "gba";
 
 export interface BuiltinGame {
     /** games/ の下のフォルダ名。版が上がっても変わらない */
@@ -11,7 +11,10 @@ export interface BuiltinGame {
     /** 画面に出す名前 */
     readonly name: string;
     readonly description: string;
-    /** gb = 白黒のゲームボーイ用、gbc = ゲームボーイカラー対応（ヘッダの CGB フラグと合っていることをビルドで確かめる） */
+    /**
+     * gb = 白黒のゲームボーイ用、gbc = ゲームボーイカラー対応（ヘッダの CGB フラグと合っていることをビルドで確かめる）、
+     * gba = ゲームボーイアドバンス用（mGBA で動かす。ヘッダが GBA の形であることをビルドで確かめる）
+     */
     readonly system: BuiltinSystem;
     /** ROM の中身の SHA-256（16 進）。ROM の ID と同じで、ゲーム内セーブ・セーブステートはこれで分かれる */
     readonly sha256: string;

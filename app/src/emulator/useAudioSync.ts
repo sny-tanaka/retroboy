@@ -15,6 +15,8 @@
 //   回して相手と進みを合わせる。相手を待つときは setTimeout を予約せずに抜け、相手のメッセージが届いたら
 //   （link.onWake）続きを走らせる。その間の音は途切れる。
 //   音は destination ではなく audioOutput.ts の出口につなぐ（開発サーバーでは無音にするため）。
+//   速さの計測（perfStats.ts）のため、音切れ（予約しようとした時刻に、もう前の音が鳴り終わっていた）の回数と、
+//   step にかかった時間を数える。
 //
 // エミュレーターの進行は音で駆動する: stepUntilNextAudioBuffer() が 1 バッファ分進めて
 // window.playAudioSamples を呼び、そこで再生を予約する。
@@ -28,6 +30,7 @@ import { type RefObject, useEffect, useRef } from "react";
 import { stepUntilNextAudioBuffer } from "../core/retroboyCore";
 import { getLinkSession } from "../link/linkStore";
 import { audioOutputOf } from "./audioOutput";
+import { addWork, countUnderrun } from "./perfStats";
 import { TimeStretcher } from "./timeStretch";
 
 const GAP_BEFORE_SAMPLE_PLAY = 15;
@@ -55,6 +58,8 @@ const useAudioSync = (
     const stretcherRef = useRef<TimeStretcher | null>(null);
 
     const nextPlayTimeRef = useRef<number>(0);
+    // 始めて（再開して）から 1 つめの音を予約したか。1 つめは今より少し前になるので、音切れに数えない
+    const primedRef = useRef(false);
     // 秒。予約した音の終わりを今よりどれだけ先にしておくか。×1 の 1 バッファの長さで決まる
     const leadRef = useRef<number>(0);
     const stepTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(
@@ -78,6 +83,7 @@ const useAudioSync = (
     useEffect(() => {
         if (playing && audioContextRef.current) {
             nextPlayTimeRef.current = audioContextRef.current.currentTime;
+            primedRef.current = false;
         }
     }, [playing]);
 
@@ -108,6 +114,14 @@ const useAudioSync = (
                 const bufferLength = left.length;
                 const duration = bufferLength / audioContext.sampleRate;
 
+                if (
+                    primedRef.current &&
+                    bufferLength > 0 &&
+                    nextPlayTimeRef.current < audioContext.currentTime
+                ) {
+                    countUnderrun();
+                }
+                if (bufferLength > 0) primedRef.current = true;
                 if (
                     nextPlayTimeRef.current <
                     audioContext.currentTime - MAX_LAG
@@ -169,6 +183,7 @@ const useAudioSync = (
             const audioContext = audioContextRef.current;
             if (!audioContext) return;
             const link = getLinkSession();
+            const workStart = performance.now();
             if (link?.stepping) {
                 // 通信ケーブルでつないでいる間は、相手との進みを合わせながら少しずつ進める（link/linkSession.ts）
                 link.onWake = wake;
@@ -177,6 +192,7 @@ const useAudioSync = (
                     if (outcome === "stalled") {
                         // 相手を待つ。音はその分だけ途切れる
                         waitingForPeer = true;
+                        addWork(performance.now() - workStart);
                         return;
                     }
                     if (outcome === "audio" && leadReached(audioContext)) {
@@ -189,6 +205,7 @@ const useAudioSync = (
                     if (leadReached(audioContext)) break;
                 }
             }
+            addWork(performance.now() - workStart);
             const waitTime =
                 (nextPlayTimeRef.current -
                     audioContext.currentTime -

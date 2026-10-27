@@ -5,8 +5,11 @@
 // - NOTICE.txt: このリポジトリの NOTICE（使っているもの・出どころ・著作権表示）
 // - licenses/retroboy-LICENSE.txt: コアの Retro Boy（smparsons/retroboy）の LICENSE（Apache-2.0）。
 //   scripts/prepare-core.sh が取ってくる core/upstream/LICENSE
+// - licenses/mgba-LICENSE.txt・blip_buf-LICENSE.txt・inih-LICENSE.txt: GBA のコアの mGBA（MPL-2.0）と、その中に入る
+//   blip_buf（LGPL-2.1）・inih（BSD-3-Clause）。scripts/prepare-core.sh mgba が取ってくる mgba/upstream/ のもの
 // - licenses/misaki-font.txt: 内蔵ソフト（テイマーズライフ）に使っている美咲フォントの説明書（ライセンスを含む）
 // - licenses/<名前>-LICENSE*.txt: リポジトリの licenses/ に置いたもの（ブート ROM・WASM に入る Rust のクレートと標準ライブラリ・
+//   mGBA の WASM に入る Emscripten の実行時・musl・compiler-rt・
 //   npm にライセンスの全文が入っていない qrcode-generator）を、そのまま写す
 // - licenses/<npm のパッケージ>-LICENSE.txt: JS のバンドルに入る npm のパッケージの LICENSE。バンドルは著作権表示を
 //   残さないので、ここで全文を入れる。NPM_LICENSES に無いパッケージがバンドルに入ったらビルドを止める
@@ -23,6 +26,9 @@ const FILES: ReadonlyArray<{ readonly from: string; readonly to: string }> = [
     { from: "LICENSE", to: "LICENSE.txt" },
     { from: "NOTICE", to: "NOTICE.txt" },
     { from: "core/upstream/LICENSE", to: "licenses/retroboy-LICENSE.txt" },
+    { from: "mgba/upstream/LICENSE", to: "licenses/mgba-LICENSE.txt" },
+    { from: "mgba/upstream/src/third-party/blip_buf/license.txt", to: "licenses/blip_buf-LICENSE.txt" },
+    { from: "mgba/upstream/src/third-party/inih/LICENSE.txt", to: "licenses/inih-LICENSE.txt" },
     { from: "games/tamers-life/assets/font/misaki/misaki.txt", to: "licenses/misaki-font.txt" },
 ];
 

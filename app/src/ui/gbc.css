@@ -787,13 +787,15 @@
     font-size: 17px;
     font-weight: 700;
 }
-/* ロードの確認に出す、セーブしたときのゲーム画面。ドットをぼかさずに 1.5 倍で出す */
+/* ロードの確認に出す、セーブしたときのゲーム画面。ドットをぼかさずに 1.5 倍で出す。
+   GBA の画面（240x160）は縦横の比が違うので、同じ枠の中に上下を黒で空けて入れる */
 .gbc-dialog-screenshot {
     display: block;
     width: 240px;
     max-width: 100%;
     height: auto;
     aspect-ratio: 160 / 144;
+    object-fit: contain;
     margin: 4px auto 12px;
     border-radius: 4px;
     background: #000;
@@ -1181,4 +1183,80 @@
     .gbc-flash[data-leaving] {
         animation: none;
     }
+}
+
+/* ---- GBA ---- */
+
+/*
+ * L・R: 操作部の上の左右の角（画面のすぐ下の肩）。押せる範囲は .gbc-shoulder 全体（見た目の .gbc-shoulder-key より広い）。
+ * ぷにコン・A/B の領域より上に重ねるので、そこを触ったときは L・R になる
+ */
+.gbc-shoulder {
+    position: absolute;
+    top: 0;
+    z-index: 2;
+    display: flex;
+    width: 96px;
+    height: 52px;
+    padding: 4px 6px 12px;
+    touch-action: none;
+}
+.gbc-shoulder-l {
+    left: 0;
+    justify-content: flex-start;
+}
+.gbc-shoulder-r {
+    right: 0;
+    justify-content: flex-end;
+}
+.gbc-shoulder-key {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 72px;
+    height: 34px;
+    background: linear-gradient(180deg, var(--gbc-key-light), var(--gbc-key));
+    box-shadow:
+        0 0 0 4px var(--gbc-detail),
+        0 3px 3px rgba(0, 0, 0, 0.5);
+    color: var(--gbc-key-text);
+    font-family: "Futura", "Avenir Next", sans-serif;
+    font-size: 15px;
+    font-weight: 600;
+}
+.gbc-shoulder-l .gbc-shoulder-key {
+    border-radius: 18px 8px 8px 8px;
+}
+.gbc-shoulder-r .gbc-shoulder-key {
+    border-radius: 8px 18px 8px 8px;
+}
+.gbc-shoulder-key[data-pressed] {
+    transform: translateY(2px);
+    background: #141317;
+    color: #c9b8ff;
+    box-shadow:
+        0 0 0 4px var(--gbc-detail),
+        0 0 6px rgba(200, 170, 255, 0.7);
+}
+
+/* 速さの表示（「59.7fps / 100%」）。画面の左上に小さく、押せない */
+.gbc-perf {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 1px 4px;
+    border-radius: 3px;
+    background: rgba(10, 8, 18, 0.62);
+    color: #b9f5cf;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 9px;
+    line-height: 1.25;
+    font-variant-numeric: tabular-nums;
+    pointer-events: none;
+}
+.gbc-perf[data-slow] {
+    color: #ffb4a8;
 }

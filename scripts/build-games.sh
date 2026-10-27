@@ -6,6 +6,7 @@
 #   リポジトリの ROM を使うので、GBDK が無くても npm run check・デプロイはできる）。
 # - Makefile が無いゲームは、ほかの方法で作る（game.json の "builtBy"。通信テストは scripts/build-testroms.sh）。
 # - game.json の "toolchain" が "gbdk" のゲームは GBDK-2020 が要る（GBDK_HOME、既定は ~/.local/gbdk）。
+# - "toolchain" が "llvm" のゲーム（GBA）は Homebrew の llvm（clang・llvm-objcopy）と lld（ld.lld）が要る。
 #
 # 使い方: scripts/build-games.sh [--check] [<id> ...]（id を省くと全部）
 #   --check: ビルドし直した ROM が、リポジトリに入っている ROM と同じかだけを確かめる（書き換えない）。
@@ -38,6 +39,13 @@ field() {
     "$1" "$2"
 }
 
+# GBA の ROM を作る LLVM（games/<id>/Makefile と同じ場所を見る）
+has_llvm() {
+  command -v brew >/dev/null 2>&1 \
+    && [ -x "$(brew --prefix llvm 2>/dev/null)/bin/clang" ] \
+    && [ -x "$(brew --prefix lld 2>/dev/null)/bin/ld.lld" ]
+}
+
 for id in ${ids[@]+"${ids[@]}"}; do
   dir="$ROOT/games/$id"
   if [ ! -f "$dir/game.json" ]; then
@@ -54,6 +62,15 @@ for id in ${ids[@]+"${ids[@]}"}; do
       continue
     fi
     echo "GBDK が見つかりません（$GBDK_HOME/bin/lcc）。README の「必要なツール」を参照してください。" >&2
+    exit 1
+  fi
+
+  if [ "$(field "$dir/game.json" toolchain)" = "llvm" ] && ! has_llvm; then
+    if $check; then
+      echo "LLVM（clang・ld.lld）が無いので、games/$id の ROM がソースと合っているかは確かめません（README の「必要なツール」）。"
+      continue
+    fi
+    echo "LLVM の clang か ld.lld が見つかりません。README の「必要なツール」を参照してください。" >&2
     exit 1
   fi
 

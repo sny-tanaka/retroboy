@@ -1,6 +1,15 @@
+import { useState } from "react";
+
+import {
+    GBA_LEAD_CHOICES,
+    type GbaLeadFrames,
+    getGbaLeadFrames,
+    setGbaLeadFrames,
+} from "../gba/gbaLead";
 import type { LinkStatus } from "../link/linkSession";
 import type { BuiltinGame } from "../storage/builtinGame";
 import type { RomSummary } from "../storage/romDb";
+import type { RomSystem } from "../storage/romSystem";
 import type { StorageStatus } from "../storage/storageStatus";
 import type { ControlLayout } from "./controlLayout";
 import { ControlLayoutMenu } from "./ControlLayoutMenu";
@@ -37,6 +46,11 @@ interface RomMenuProps {
     readonly link: LinkStatus | null;
     readonly onCloseLink: () => void;
     readonly onOpenLinkConnect: () => void;
+    /** いま読み込んでいる ROM の本体（無ければ null）。GBA では通信ケーブルを使えない */
+    readonly system: RomSystem | null;
+    /** 速さの表示（画面の隅の fps）を出しているか。本体ごとに覚える */
+    readonly perfShown: boolean;
+    readonly onTogglePerf: () => void;
 }
 
 /** メニューの一番上の「一時停止」「再開」。押すとメニューは閉じる（呼ぶ側で閉じる） */
@@ -72,7 +86,41 @@ const formatStorage = ({ persisted, usageMB, quotaMB }: StorageStatus) => ({
     usage: `${usageMB ?? "?"} MB / ${quotaMB ?? "?"} MB`,
 });
 
-const SYSTEM_LABELS = { gb: "GB", gbc: "GBC" } as const;
+/** 「速さの表示」の中の、GBA の音の先読みの長さ（gba/gbaLead.ts）。メニューを閉じて再開したときから効く */
+const GbaLeadMenu = () => {
+    const [lead, setLead] = useState<GbaLeadFrames>(getGbaLeadFrames);
+    return (
+        <>
+            <div
+                className="gbc-menu-row"
+                role="radiogroup"
+                aria-label="GBA の音の先読み"
+            >
+                {GBA_LEAD_CHOICES.map(frames => (
+                    <button
+                        key={frames}
+                        type="button"
+                        role="radio"
+                        aria-checked={frames === lead}
+                        className="gbc-menu-item"
+                        data-current={frames === lead || undefined}
+                        onClick={() => {
+                            setGbaLeadFrames(frames);
+                            setLead(frames);
+                        }}
+                    >
+                        {Math.round((frames * 1000) / 59.7275)}ms
+                    </button>
+                ))}
+            </div>
+            <p className="gbc-menu-note">
+                GBA の音の先読み（いまは {lead} フレーム）。長いほど音が途切れにくく、短いほどボタンの反応が速い。メニューを閉じたときから効きます。
+            </p>
+        </>
+    );
+};
+
+const SYSTEM_LABELS = { gb: "GB", gbc: "GBC", gba: "GBA" } as const;
 
 /** メニューの「内蔵ソフト」。アプリに入っている自作ゲームを選ぶ */
 const BuiltinGameMenu = ({
@@ -153,6 +201,9 @@ export const RomMenu = ({
     link,
     onCloseLink,
     onOpenLinkConnect,
+    system,
+    perfShown,
+    onTogglePerf,
 }: RomMenuProps) => {
     const linked = link?.phase.kind === "open";
     const storage = storageStatus && formatStorage(storageStatus);
@@ -163,11 +214,23 @@ export const RomMenu = ({
                 disabled={!gameActive}
                 onTogglePause={onTogglePause}
             />
-            <LinkMenu
-                link={link}
-                onCloseLink={onCloseLink}
-                onOpenConnect={onOpenLinkConnect}
-            />
+            {system === "gba" ? (
+                <section className="gbc-menu-section">
+                    <h2 className="gbc-menu-heading">通信ケーブル</h2>
+                    <button type="button" className="gbc-menu-item" disabled>
+                        通信ケーブルでつなぐ
+                    </button>
+                    <p className="gbc-menu-note">
+                        GBA では使えません（倍速も使えません）。
+                    </p>
+                </section>
+            ) : (
+                <LinkMenu
+                    link={link}
+                    onCloseLink={onCloseLink}
+                    onOpenConnect={onOpenLinkConnect}
+                />
+            )}
             <BuiltinGameMenu
                 games={builtinGames}
                 currentRomId={currentRomId}
@@ -222,6 +285,34 @@ export const RomMenu = ({
             />
 
             <section className="gbc-menu-section">
+                <h2 className="gbc-menu-heading">速さの表示</h2>
+                <button
+                    type="button"
+                    role="switch"
+                    aria-checked={perfShown}
+                    className="gbc-menu-item gbc-menu-choice"
+                    data-current={perfShown || undefined}
+                    disabled={system === null}
+                    onClick={onTogglePerf}
+                >
+                    <span className="gbc-menu-choice-text">
+                        <span className="gbc-menu-item-name">
+                            画面の隅に fps を出す
+                            {system && `（${system === "gba" ? "GBA" : "GB・GBC"}）`}
+                        </span>
+                        <span className="gbc-menu-choice-description">
+                            1 秒あたりのフレーム・等速に対する割合・音切れの回数・1 フレームの処理の時間
+                        </span>
+                    </span>
+                    {perfShown && <span className="gbc-menu-badge">表示中</span>}
+                </button>
+                <p className="gbc-menu-note">
+                    GBA と GB・GBC で別々に覚えます（GBA は初めから出します）。
+                </p>
+                {system === "gba" && <GbaLeadMenu />}
+            </section>
+
+            <section className="gbc-menu-section">
                 <h2 className="gbc-menu-heading">セーブステート（ファイル）</h2>
                 <div className="gbc-menu-row">
                     <button
@@ -260,7 +351,7 @@ export const RomMenu = ({
                 )}
                 <p className="gbc-menu-note">
                     キーボード: 方向 = 矢印キー / A = Z / B = X / START = Enter
-                    / SELECT = Space
+                    / SELECT = Space / L = A / R = S（L・R は GBA だけ）
                 </p>
             </section>
 

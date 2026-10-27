@@ -20,9 +20,11 @@ const OUT_DIR = "builtin";
 const VIRTUAL_ID = "virtual:builtin-games";
 const RESOLVED_VIRTUAL_ID = `\0${VIRTUAL_ID}`;
 
-// app/src/storage/romDb.ts と同じ（アプリが受け付ける ROM の大きさ）
+// app/src/storage/romSystem.ts と同じ（アプリが受け付ける ROM の大きさ）
 const MIN_ROM_SIZE = 0x150;
-const MAX_ROM_SIZE = 8 * 1024 * 1024;
+const MAX_GB_ROM_SIZE = 8 * 1024 * 1024;
+const MAX_GBA_ROM_SIZE = 32 * 1024 * 1024;
+const EXTENSIONS: Readonly<Record<BuiltinSystem, string>> = { gb: "gb", gbc: "gbc", gba: "gba" };
 const ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
 
 interface LoadedGame {
@@ -52,8 +54,8 @@ const loadGame = async (id: string): Promise<LoadedGame> => {
     const name = requireString(id, json, "name");
     const description = requireString(id, json, "description");
     const system = requireString(id, json, "system");
-    if (system !== "gb" && system !== "gbc") {
-        fail(id, `"system" は "gb" か "gbc" にしてください。`);
+    if (system !== "gb" && system !== "gbc" && system !== "gba") {
+        fail(id, `"system" は "gb"・"gbc"・"gba" のどれかにしてください。`);
     }
     const saveFormat = json.saveFormat ?? 1;
     if (!Number.isInteger(saveFormat)) {
@@ -63,7 +65,17 @@ const loadGame = async (id: string): Promise<LoadedGame> => {
     const data = await readFile(romPath).catch((err: unknown) =>
         fail(id, `ROM（${romPath}）を読めません。scripts/build-games.sh でビルドしてください。${String(err)}`),
     );
-    if (data.length < MIN_ROM_SIZE || data.length > MAX_ROM_SIZE) {
+    if (system === "gba") {
+        if (data.length < MIN_ROM_SIZE || data.length > MAX_GBA_ROM_SIZE) {
+            fail(id, "ROM の大きさが GBA の ROM として合いません。");
+        }
+        // アプリはヘッダで GBA かを見分ける（app/src/storage/romSystem.ts の isGbaHeader と同じ）
+        if (data[3] !== 0xea || data[0xb2] !== 0x96) {
+            fail(id, `"system" が "gba" ですが、ROM のヘッダが GBA の形（3 バイト目が 0xEA、0xB2 が 0x96）ではありません。`);
+        }
+        return makeGame(id, json, name, description, "gba", romPath, data);
+    }
+    if (data.length < MIN_ROM_SIZE || data.length > MAX_GB_ROM_SIZE) {
         fail(id, "ROM の大きさが Game Boy の ROM として合いません。");
     }
     // ヘッダの CGB フラグ（0x143 の bit 7）と "system" が合っているか。アプリはヘッダで GB / GBC を決める
@@ -75,14 +87,27 @@ const loadGame = async (id: string): Promise<LoadedGame> => {
     if (data[0x149] > 0x05) {
         fail(id, "ROM のヘッダの RAM サイズ（0x149）が 0〜5 ではありません。");
     }
+    return makeGame(id, json, name, description, system as BuiltinSystem, romPath, data);
+};
+
+const makeGame = (
+    id: string,
+    json: Record<string, unknown>,
+    name: string,
+    description: string,
+    system: BuiltinSystem,
+    romPath: string,
+    data: Buffer,
+): LoadedGame => {
+    const saveFormat = json.saveFormat ?? 1;
     const sha256 = createHash("sha256").update(data).digest("hex");
-    const extension = system === "gbc" ? "gbc" : "gb";
+    const extension = EXTENSIONS[system];
     return {
         game: {
             id,
             name,
             description,
-            system: system as BuiltinSystem,
+            system,
             sha256,
             size: data.length,
             file: `${OUT_DIR}/${id}-${sha256.slice(0, 12)}.${extension}`,

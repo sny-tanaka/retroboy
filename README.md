@@ -11,10 +11,13 @@
   - `app/src/session/useRomSession.ts` … 画面の状態とロジック（ROM の追加・自動読み込み・起動・停止）。`App.tsx` は見た目だけ。
   - `app/public/` … Web App Manifest とアイコン。`app/sw/sw.template.js` が Service Worker の本体で、`app/scripts/generate-sw.mjs` がビルド後に `dist/sw.js` を作る。
   - `app/src/ui/` … ゲームボーイカラー風の本体の部品（画面枠・ぷにコン・A/B・SELECT/START・メニュー・片手操作の `OneHandCluster`（片手 A）と `GestureControls`（片手 B））。`npm run dev` で `/preview.html` を開くと、エミュレーターに繋がずに見た目と押した反応を確かめられる（`?layout=twohand|onehand-a|onehand-b` で操作を選んで開く、`?reach=1` で右手の親指の届く範囲の目安を重ねる）。
+- `mgba/` … GBA のコア。本家 [mGBA](https://github.com/mgba-emu/mgba)（MPL-2.0）を `mgba/upstream.rev`（0.10.5）のコミットで `mgba/upstream/`（git に入れない）に取ってきて、`mgba/patches/` のパッチ（Emscripten ではスレッドなしで作る）を当てる。`mgba/glue/mgba-glue.c` は JS から呼ぶ口。下の「GBA（試し）」。
+  - `app/src/gba/` … GBA のコアの TS の口（`gbaCore.ts`）、いま動いている GBA のゲーム（`gbaSession.ts`。ボタン・ゲーム内セーブ）、音の予約の時刻で進めるループ（`useGbaLoop.ts`）。
+- `scripts/build-mgba.sh` … mGBA を WASM にビルドして `app/src/gba/core/` に出力する（生成物は git に入れない。Emscripten は emsdk 5.0.7）。
 - `scripts/build-wasm.sh` … コアを WASM にビルドして `app/src/core/` に出力する（生成物は git に入れない）。最初に `scripts/prepare-core.sh` で本家を用意してパッチを当てる。
-- `scripts/prepare-core.sh` / `scripts/export-core-patches.sh` … 本家の用意とパッチ当て／`core/upstream/` の変更をパッチに書き出す。
+- `scripts/prepare-core.sh` / `scripts/export-core-patches.sh` … 本家の用意とパッチ当て／`core/upstream/` の変更をパッチに書き出す。引数に `mgba` を付けると mGBA（`mgba/`）で同じことをする。
 - `scripts/test-core.sh` … コアの試験（本家の単体試験と `core/tests/`）。
-- `games/` … アプリに内蔵して配信する自作ゲーム（ゲームごとに `games/<id>/` にソース・ビルドの仕方・`game.json`〔表示名・説明・GB/GBC・ROM の場所〕・できた ROM）。いまは通信テスト（`games/linktest/`。ROM は `testroms/link/`）だけ。決まりと仕組みは `docs/builtin-games.md`。
+- `games/` … アプリに内蔵して配信する自作ゲーム（ゲームごとに `games/<id>/` にソース・ビルドの仕方・`game.json`〔表示名・説明・GB/GBC・ROM の場所〕・できた ROM）。通信テスト（`games/linktest/`。ROM は `testroms/link/`）・テイマーズライフ（`games/tamers-life/`）・GBA の重さを測るデモ（`games/gba-bench/`）。決まりと仕組みは `docs/builtin-games.md`。
   - `app/plugins/builtinGames.ts` … ビルドのときに `games/` を読み、内蔵ソフトの目録をアプリに入れ、ROM と目録を `app/dist/builtin/` に出す vite のプラグイン。
 - `scripts/build-games.sh` … `games/` のゲームのうち Makefile があるものをビルドする（GBDK-2020 など。`--check` でコミットしてある ROM と合っているかを確かめる）。
 - `testroms/` … 自作のテスト ROM（RGBDS のソースと、できた ROM）。いまは通信ケーブルのテスト ROM（`testroms/link/link.asm` と `linktest.gb`）。
@@ -36,7 +39,7 @@
 
 画面はゲームボーイカラー風の本体で、iPhone の縦持ちで使う。
 
-1. 初回はゲーム画面の中の「内蔵ソフトから選ぶ」でアプリに入っている自作のソフトを選ぶか、「ROM を追加」で ROM ファイル（`.gb` / `.gbc`）を選ぶ。追加した ROM は端末内（IndexedDB）に保存され、そのまま始まる。内蔵ソフトはファイルを用意しなくても遊べ、オフラインでも選べる（削除はできない）。
+1. 初回はゲーム画面の中の「内蔵ソフトから選ぶ」でアプリに入っている自作のソフトを選ぶか、「ROM を追加」で ROM ファイル（`.gb` / `.gbc` / `.gba`）を選ぶ。追加した ROM は端末内（IndexedDB）に保存され、そのまま始まる。内蔵ソフトはファイルを用意しなくても遊べ、オフラインでも選べる（削除はできない）。
 2. 次からは開くと前回の ROM が読み込まれるので、ゲーム画面の「タップして開始」を押す（iPhone は音を鳴らすのにタップが要るため）。
 3. ほかのソフトは「メニュー」の「内蔵ソフト」「追加した ROM」の一覧で選ぶか、「＋ ROM を追加」で足す。遊んでいる途中でも切り替えられる。
 
@@ -104,6 +107,8 @@ ROM の ID の計算（`crypto.subtle`）は HTTPS か `localhost` でしか動�
 - wasm-pack
 - RGBDS（テスト ROM のビルド。テスト ROM はリポジトリに入っているので、ソースを直すときだけ要る。入っていれば `npm run check` がソースと ROM が合っているかも確かめる）
 - GBDK-2020 **4.5.0**（`games/` の自作ゲームのビルド。ROM はリポジトリに入っているので、ゲームのソースを直すときだけ要る。入っていれば `npm run check` がソースと ROM が合っているかも確かめる。版が違うとできる ROM が変わり `--check` が止まるので、版をそろえる）
+- emsdk **5.0.7**（Emscripten。GBA のコアの mGBA を WASM にする `scripts/build-mgba.sh`。`npm run check` が使うので要る）と cmake・ninja
+- LLVM（Homebrew の `llvm` と `lld`。GBA のデモ `games/gba-bench/` のビルド。ROM はリポジトリに入っているので、ソースを直すときだけ要る。版は `games/gba-bench/README.md`）
 - python3（標準のものだけ。テイマーズライフの文とフォントの変換 `games/tamers-life/tools/text.py` に使う。macOS には入っている）
 
 macOS（Homebrew）の例:
@@ -113,6 +118,15 @@ brew install rustup wasm-pack rgbds
 # rustup は keg-only なので PATH に入らない。scripts/build-wasm.sh は自動で rustup 側を優先する
 "$(brew --prefix rustup)/bin/rustup" default stable
 "$(brew --prefix rustup)/bin/rustup" target add wasm32-unknown-unknown
+```
+
+emsdk は `~/.local/emsdk` に入れる（別の場所なら環境変数 `EMSDK` で指す。`scripts/build-mgba.sh` は版が 5.0.7 でないと止まる）:
+
+```sh
+brew install cmake ninja llvm lld
+git clone --branch 5.0.7 --depth 1 https://github.com/emscripten-core/emsdk.git ~/.local/emsdk
+~/.local/emsdk/emsdk install 5.0.7
+~/.local/emsdk/emsdk activate 5.0.7    # シェルの設定（emsdk_env.sh）は要らない。build-mgba.sh が直に emcc を使う
 ```
 
 GBDK-2020 は Homebrew に無いので、[GitHub Releases の 4.5.0](https://github.com/gbdk-2020/gbdk-2020/releases/tag/4.5.0) から macOS 用の tar.gz（Apple Silicon なら `gbdk-macos-arm64.tar.gz`、Intel なら `gbdk-macos.tar.gz`）を落として `~/.local/gbdk` に展開する（別の場所なら環境変数 `GBDK_HOME` で指す）:
@@ -137,6 +151,8 @@ Homebrew の `rust` が入っていても消す必要はない（`rust` には w
 # 1. コアを WASM にビルド（app/src/core/ に出力。本家の版やパッチを変えたら再実行）
 #    初回は本家のソースを GitHub から core/upstream/ に取ってくる
 ./scripts/build-wasm.sh
+#    GBA のコア（mGBA）も（app/src/gba/core/ に出力。初回は mgba/upstream/ に取ってきて 1 分ほどかかる）
+./scripts/build-mgba.sh
 
 # 2. アプリの依存を入れて起動
 cd app
@@ -155,7 +171,7 @@ cd app
 npm run check
 ```
 
-WASM のビルド → コアの試験（テスト ROM のビルドを含む）→ 自作ゲームの ROM がソースと合っているか（`scripts/build-games.sh --check`）→ 型チェック → lint → 本番ビルドを順に実行し、どれかが失敗したらそこで止まる。
+WASM のビルド（Retro Boy と mGBA）→ コアの試験（テスト ROM のビルドを含む）→ 自作ゲームの ROM がソースと合っているか（`scripts/build-games.sh --check`）→ 型チェック → lint → 本番ビルドを順に実行し、どれかが失敗したらそこで止まる。
 
 その他のコマンド（`app/` で実行）:
 
@@ -170,8 +186,9 @@ WASM のビルド → コアの試験（テスト ROM のビルドを含む）�
 | `npm run preview` | 本番ビルドをローカルで配信（Service Worker も動く。音を出さずに確かめるときは URL に `?mute=1`） |
 | `npm run deploy` | `npm run check` を通してから GitHub Pages に出す（下の「GitHub Pages に公開する」。`-- --dry-run` で push しない） |
 | `npm run build:wasm` | `../scripts/build-wasm.sh` と同じ |
+| `npm run build:mgba` | `../scripts/build-mgba.sh` と同じ（GBA のコア） |
 
-キーボードでの操作: 方向 = 矢印キー / A = Z / B = X / START = Enter / SELECT = Space
+キーボードでの操作: 方向 = 矢印キー / A = Z / B = X / START = Enter / SELECT = Space / L = A / R = S（L・R は GBA だけ）
 
 ## GitHub Pages に公開する
 
@@ -302,6 +319,29 @@ cargo update --manifest-path core/Cargo.toml   # 本家の依存が変わった�
 - `scripts/link-e2e.mjs` は、`/link-test.html?mode=webrtc` で、QR を出す → 偽のカメラで読む → つながる → テスト ROM で受け渡す、を Playwright の WebKit で通して、各段の画面（390x844）を書き出す。使い方はファイルの先頭。
 - アプリの URL に直接 `?link=tab`（`&room=<名前>` で組を分ける）を付けても、同じ room の別のタブ・窓とつながる。ただし裏に回ったタブはブラウザがタイマーを間引くので、とても遅くなる。窓を 2 つ横に並べるか、`/link-test.html` を使う。
 - 開発時は、各アプリの `window.__retroboyLink()` で、コアの時刻・止まった回数と時間・離すのを遅らせているボタン・つながりの状態を読める。
+
+## GBA（試し）
+
+GB だと苦しくなったら自作ゲームを GBA に移すかを決めるために、GBA の ROM（`.gba`）も動かせるようにしてある（試しの段階）。
+いちばんの論点は、iPhone の Safari（ホーム画面のアプリ）で等速に動くかと、音が途切れないか。
+
+- コア: mGBA 0.10.5（MPL-2.0）。本家を rev 固定で取ってきてパッチを当て、GBA のコアだけを Emscripten で WASM にする
+  （`scripts/build-mgba.sh`。WASM 約 630KB・JS 約 14KB）。npm のビルド済みの包み（`@thenick775/mgba-wasm`）は、
+  スレッド（SharedArrayBuffer）を使い cross-origin isolation（COOP/COEP のヘッダ）が要るので使わない。GitHub Pages は
+  ヘッダを付けられず、Service Worker で付け直す細工（coi-serviceworker など）は初回の読み込み直しや、いまの Service Worker と
+  の取り合いがあるため。スレッドなしで作り、JS から 1 フレームずつ進める（Game Boy と同じくメインスレッドで動く）。
+- 振り分け: 名前が `.gba` か、ヘッダが GBA の形なら mGBA、それ以外は Retro Boy（`app/src/storage/romSystem.ts`）。
+  mGBA の WASM は GBA のゲームを初めて始めるときに読み込む。
+- 同じもの: ROM の登録（IndexedDB・SHA-256 の ID）、前回の ROM の自動読み込み、ゲーム内セーブ（localStorage `sram:<ROM の ID>`。
+  10 秒ごとと画面を離れるとき）、画面の「セーブ」「ロード」とセーブステートのファイル（GBA は `<名前>.ss1`。mGBA の形式）。
+- GBA で使えないもの: 倍速（ボタンを隠す）、通信ケーブル（メニューに「GBA では使えません」。つないでいれば、GBA を始めると切る）。
+- 画面: 240x160 を整数倍で出す。L・R は操作部の上の左右の角（画面のすぐ下の肩）に、GBA のゲームのときだけ出る。
+- 速さの表示: 画面の左上に「59.7fps / 100%」・音切れの回数・1 フレームの処理の時間（ms）を出す（`app/src/ui/PerfOverlay.tsx`）。
+  メニューの「速さの表示」で出す・出さないを切り替え、GBA と GB・GBC で別々に覚える（GBA は初めから出す）。
+  音切れは、次の音を予約するときにもう前の音が鳴り終わっていた回数（その間は無音）。GB の倍速の切り替えの直後にも数える。
+- 音の先読み（GBA）: 先に作って予約しておく音の長さ。メニューの「速さの表示」で 33 / 50 / 67 / 100ms から選ぶ（既定は 50ms。
+  端末に覚える）。長いほどタイマーの遅れで音が途切れにくく、短いほどボタンの反応が速い（`app/src/gba/gbaLead.ts`）。
+- 試し用の ROM: 内蔵ソフトの「GBA ベンチ」（`games/gba-bench/`。スプライト 128 個・回転の背景・鳴り続ける音）。
 
 ## ライセンス
 

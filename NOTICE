@@ -30,6 +30,28 @@ MIT の著作権表示と許諾の文を入れる。
   Unicode License v3（Copyright 1991-2024 Unicode, Inc.）→ licenses/rust-std-unicode-LICENSE.txt
   （同じ toolchain の Unicode-3.0.txt）。
 
+GBA のゲームは mGBA (https://mgba.io/ ・ https://github.com/mgba-emu/mgba) のコアで動かす。
+Copyright © 2013 – 2022 Jeffrey Pfau（本家の README のとおり）。Mozilla Public License 2.0。
+  → licenses/mgba-LICENSE.txt
+- 本家のコミット 26b7884bc25a5933960f3cdcd98bac1ae14d42e2（0.10.5 のタグ。mgba/upstream.rev）をビルドのときに
+  取ってきて、mgba/patches/ のパッチ（Emscripten ではスレッドを使わずに作る CMake の変更）を当て、
+  GBA のコアだけを WASM（app/src/gba/core/ に生成）にして配信物に含む。本家のコードそのものはリポジトリに含めない。
+- MPL-2.0 の 3.2 の「ソースの入手のしかた」: 配信物の mGBA のソースは、上の本家のコミットと、このリポジトリ
+  （https://github.com/sny-tanaka/retroboy-snap）の mgba/patches/・mgba/glue/・scripts/build-mgba.sh で全部そろう。
+- mgba/glue/mgba-glue.c（JS から呼ぶ口）は mGBA の src/platform/libretro/libretro.c の使い方に倣って書いたもの。
+mGBA の WASM には、mGBA に入っている次の第三者のコードも入る:
+- blip_buf 1.1.0 (http://www.slack.net/~ant/) Copyright (C) 2003-2009 Shay Green。
+  GNU Lesser General Public License 2.1 以降。→ licenses/blip_buf-LICENSE.txt
+  静的にリンクしているので、LGPL の求め（利用者が手を加えた blip_buf でリンクし直せること）には、上のとおり
+  ソースとビルドの手順（scripts/build-mgba.sh）を全部公開していることで応える。
+- inih (https://github.com/benhoyt/inih) Copyright (C) 2009-2020, Ben Hoyt。BSD-3-Clause。→ licenses/inih-LICENSE.txt
+mGBA の WASM と、それを読み込む JS（mgbaCore.js）は Emscripten 5.0.7 (https://emscripten.org) で作り、
+Emscripten の実行時のコード・C の標準ライブラリ（musl）・compiler-rt が入る。それぞれのライセンスの全文を入れる
+（emsdk 5.0.7 の upstream/emscripten の LICENSE・system/lib/libc/musl/COPYRIGHT・system/lib/compiler-rt/LICENSE.TXT を写した）。
+- Emscripten: MIT か University of Illinois/NCSA の選択。Copyright (c) 2010-2014 Emscripten authors。→ licenses/emscripten-LICENSE.txt
+- musl: MIT。Copyright © 2005-2020 Rich Felker, et al.。→ licenses/musl-COPYRIGHT.txt
+- compiler-rt: Apache License 2.0 with LLVM Exceptions。→ licenses/compiler-rt-LICENSE.txt
+
 画面（JS のバンドル）に次の npm のパッケージが入る。バンドルには著作権表示が残らないので、全文を入れる。
 バンドルにここに無いパッケージが入ると、ビルドが止まる。
 - React・React DOM・scheduler (https://github.com/facebook/react)
@@ -51,6 +73,9 @@ MIT の著作権表示と許諾の文を入れる。
   THESE FONTS ARE PROVIDED "AS IS" WITHOUT WARRANTY.」（同梱の misaki.txt の「ライセンス」）
   → licenses/misaki-font.txt
   ▶ と ◀ は美咲フォントに無いので、自分で描いた（games/tamers-life/tools/text.py の CUSTOM）。
+
+自作の GBA のデモ「GBA ベンチ」（games/gba-bench/）は、LLVM の clang と lld で作る。ライブラリ（libc・compiler-rt）は
+リンクしない（-nostdlib。起動のコード・字の形・sin の表も自分で書いた）ので、ROM に第三者のコードは入らない。
 
 自作ゲーム（games/）の ROM は GBDK-2020 (https://github.com/gbdk-2020/gbdk-2020) で作っており、
 ROM に GBDK のライブラリ（crt0 など）が入る。GBDK のライブラリは GPLv2 にリンクの例外を付けたもの

@@ -7,6 +7,7 @@
 //   開始・読み込み中・エラーはダイアログではなくゲーム画面の中に出す。セーブステートの処理は
 //   emulator/saveState.ts に、状態とロジック（ROM の保存・自動読み込み・起動）は session/useRomSession.ts に切り出した。
 //   モードの選択は外し、ROM ヘッダの CGB フラグか拡張子 .gbc で決めるようにした。
+//   GBA（mGBA）のゲームでは、画面を 240x160 にし、L・R を出し、倍速ボタンを隠す。画面の隅に速さを出せる。
 import {
     lazy,
     type RefObject,
@@ -17,10 +18,15 @@ import {
     useSyncExternalStore,
 } from "react";
 
-import { releaseKey } from "./core/retroboyCore";
 import { flushPendingSaves } from "./emulator/cartridgeEffects";
-import { pressGameKey, releaseGameKey } from "./emulator/gameKeys";
+import {
+    pressGameKey,
+    releaseGameKey,
+    releaseGameKeyNow,
+} from "./emulator/gameKeys";
 import GameScreen from "./emulator/GameScreen";
+import { usePerfStats } from "./emulator/perfStats";
+import { GBA_HEIGHT, GBA_WIDTH } from "./gba/gbaCore";
 import { closeLink, dismissLink } from "./link/linkStore";
 import {
     APP_VERSION,
@@ -34,7 +40,13 @@ import { type ControlLayout, useControlLayout } from "./ui/controlLayout";
 import { GbcBody } from "./ui/GbcBody";
 import { describeLink, describeWaiting } from "./ui/LinkMenu";
 import { MenuSheet } from "./ui/MenuSheet";
+import { PerfOverlay } from "./ui/PerfOverlay";
+import { usePerfOverlaySetting } from "./ui/perfOverlaySetting";
 import { RomMenu } from "./ui/RomMenu";
+
+// Game Boy と GBA の 1 秒あたりのフレームの数（4194304 / 70224 と 16777216 / 280896。どちらも 59.7275）
+const TARGET_FPS = 59.7275;
+const GBA_DOTS = { width: GBA_WIDTH, height: GBA_HEIGHT };
 
 // ゲーム画面の中に出す案内（開始・読み込み中・エラー・ROM 未登録）。遊んでいる間は出さない
 const ScreenMessage = ({
@@ -379,10 +391,17 @@ const App = () => {
     const [controlLayout, setControlLayout] = useControlLayout();
     const selectControlLayout = (layout: ControlLayout): void => {
         if (layout === controlLayout) return;
-        pressedRef.current.forEach(button => releaseKey(button));
+        pressedRef.current.forEach(button => releaseGameKeyNow(button));
         pressedRef.current.clear();
         setControlLayout(layout);
     };
+
+    // 速さの表示。本体ごとに出す・出さないを覚える（GBA は初めから出す）
+    const { system } = session;
+    const gba = system === "gba";
+    const [perfShownFor, setPerfShown] = usePerfOverlaySetting();
+    const perfShown = system !== null && perfShownFor(system);
+    const perf = usePerfStats(perfShown && playing, TARGET_FPS);
 
     return (
         <>
@@ -393,8 +412,14 @@ const App = () => {
                         canvasRef={canvasRef}
                         playing={playing}
                         paused={paused}
+                        width={gba ? GBA_WIDTH : undefined}
+                        height={gba ? GBA_HEIGHT : undefined}
                     />
                 }
+                screenDots={gba ? GBA_DOTS : undefined}
+                screenCorner={perf && <PerfOverlay snapshot={perf} />}
+                shoulderButtons={gba}
+                canChangeSpeed={!gba}
                 screenOverlay={
                     status.kind === "running" &&
                     !session.notice &&
@@ -526,6 +551,11 @@ const App = () => {
                         closeMenu();
                     }}
                     onOpenLinkConnect={openLinkConnect}
+                    system={system}
+                    perfShown={perfShown}
+                    onTogglePerf={() => {
+                        if (system) setPerfShown(system, !perfShown);
+                    }}
                 />
             </MenuSheet>
             <MenuSheet
@@ -560,7 +590,7 @@ const App = () => {
                 }}
                 onCancel={closeLoadConfirm}
             />
-            {/* accept は付けない（iOS は .gb / .gbc / .rbs を知らず、ファイルを選べなくなることがある） */}
+            {/* accept は付けない（iOS は .gb / .gbc / .gba / .rbs を知らず、ファイルを選べなくなることがある） */}
             <input
                 ref={romInputRef}
                 type="file"

@@ -1,0 +1,7 @@
+{
+    "name": "GBA ベンチ",
+    "description": "GBA の重さを測る自作のデモ。スプライト 128 個・回転する背景（モード 1/2）・鳴り続ける音。A=音 B=スプライト L/R=回転の速さ START=モード SELECT=横ゆれ",
+    "system": "gba",
+    "rom": "gba-bench.gba",
+    "toolchain": "llvm"
+}

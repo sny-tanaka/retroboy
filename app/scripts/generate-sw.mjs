@@ -16,8 +16,8 @@ const appDir = join(dirname(fileURLToPath(import.meta.url)), "..");
 const distDir = join(appDir, "dist");
 const templatePath = join(appDir, "sw", "sw.template.js");
 
-// 配信してはいけないもの: ROM・セーブステート・セーブ RAM
-const FORBIDDEN = /\.(gb|gbc|rbs|sav|srm)$/i;
+// 配信してはいけないもの: ROM（GBA を含む）・セーブステート（GBA の .ss0〜9 を含む）・セーブ RAM
+const FORBIDDEN = /\.(gb|gbc|gba|rbs|ss\d|sav|srm)$/i;
 // 内蔵ソフトの置き場と目録
 const BUILTIN_DIR = "builtin/";
 const BUILTIN_INDEX = `${BUILTIN_DIR}index.json`;

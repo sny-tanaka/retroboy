@@ -1,0 +1,145 @@
+// GBA のコア（mGBA の WASM。scripts/build-mgba.sh が app/src/gba/core/ に作る）を TS から使う口。
+// Game Boy の Retro Boy とは別のコアで、GBA の ROM を始めるときに初めて読み込む（最初の起動を重くしない）。
+// スレッドは使わない（SharedArrayBuffer は要らない）。1 回の runFrame で 1 フレーム進め、その分の絵と音を取り出す。
+import createMgbaCore, { type MgbaModule } from "./core/mgbaCore.js";
+import wasmUrl from "./core/mgbaCore.wasm?url";
+
+export const GBA_WIDTH = 240;
+export const GBA_HEIGHT = 160;
+
+// mGBA のボタンのビット（mgba-glue.c の gba_set_keys）
+export const GBA_KEY_BITS: Readonly<Record<string, number>> = {
+    A: 1 << 0,
+    B: 1 << 1,
+    Select: 1 << 2,
+    Start: 1 << 3,
+    Right: 1 << 4,
+    Left: 1 << 5,
+    Up: 1 << 6,
+    Down: 1 << 7,
+    R: 1 << 8,
+    L: 1 << 9,
+};
+
+const SAVE_MAX = 128 * 1024;
+
+export class GbaCore {
+    private readonly module: MgbaModule;
+    /** 1 秒あたりのフレームの数（GBA は 59.7275） */
+    readonly frameRate: number;
+    private readonly image: ImageData;
+
+    private constructor(module: MgbaModule, frameRate: number) {
+        this.module = module;
+        this.frameRate = frameRate;
+        this.image = new ImageData(GBA_WIDTH, GBA_HEIGHT);
+    }
+
+    /** ROM を読み込む（前の ROM は捨てる）。save はゲーム内セーブ（無ければ null）。失敗したらエラー文 */
+    static create(
+        module: MgbaModule,
+        rom: ArrayBuffer,
+        save: Uint8Array | null,
+        sampleRate: number,
+    ): GbaCore | { error: string } {
+        const romPointer = module._gba_alloc_rom(rom.byteLength);
+        if (!romPointer) return { error: "メモリが足りません。" };
+        module.HEAPU8.set(new Uint8Array(rom), romPointer);
+        if (save && save.length > 0) {
+            module.HEAPU8.set(
+                save.subarray(0, SAVE_MAX),
+                module._gba_save_buffer(),
+            );
+        }
+        const result = module._gba_load(rom.byteLength, sampleRate);
+        if (result !== 0) {
+            module._gba_unload();
+            return { error: "GBA の ROM として読めませんでした。" };
+        }
+        return new GbaCore(module, module._gba_frame_rate_milli() / 1000);
+    }
+
+    unload(): void {
+        this.module._gba_unload();
+    }
+
+    setKeys(keys: number): void {
+        this.module._gba_set_keys(keys);
+    }
+
+    /** 1 フレーム進め、そのフレームの音（左右）を返す。返す配列はコピーなので持っていてよい */
+    runFrame(): [Float32Array, Float32Array] {
+        const module = this.module;
+        const count = module._gba_run_frame();
+        const left = module._gba_audio_left() >> 2;
+        const right = module._gba_audio_right() >> 2;
+        return [
+            module.HEAPF32.slice(left, left + count),
+            module.HEAPF32.slice(right, right + count),
+        ];
+    }
+
+    /** いまの絵を canvas に描く */
+    draw(context: CanvasRenderingContext2D): void {
+        const pointer = this.module._gba_video();
+        this.image.data.set(
+            this.module.HEAPU8.subarray(
+                pointer,
+                pointer + GBA_WIDTH * GBA_HEIGHT * 4,
+            ),
+        );
+        context.putImageData(this.image, 0, 0);
+    }
+
+    /** ゲームの名前（ヘッダの 12 文字） */
+    title(): string {
+        const pointer = this.module._malloc(16);
+        try {
+            this.module._gba_title(pointer);
+            const bytes = this.module.HEAPU8.subarray(pointer, pointer + 16);
+            const end = bytes.indexOf(0);
+            return String.fromCharCode(
+                ...bytes.subarray(0, end < 0 ? 16 : end),
+            ).trim();
+        } finally {
+            this.module._free(pointer);
+        }
+    }
+
+    /** ゲーム内セーブの中身のコピー。セーブを使っていない（まだ種類が決まっていない）なら null */
+    saveData(): Uint8Array | null {
+        const size = this.module._gba_save_size();
+        if (size === 0) return null;
+        const pointer = this.module._gba_save_buffer();
+        return this.module.HEAPU8.slice(pointer, pointer + size);
+    }
+
+    /** セーブステート（mGBA の形式）。作れなければ null */
+    saveState(): Uint8Array | null {
+        const size = this.module._gba_state_save();
+        if (size === 0) return null;
+        const pointer = this.module._gba_state_buffer();
+        return this.module.HEAPU8.slice(pointer, pointer + size);
+    }
+
+    /** セーブステートを読む。別のゲームのものや壊れたものなら false */
+    loadState(data: Uint8Array): boolean {
+        const pointer = this.module._gba_state_alloc(data.length);
+        if (!pointer) return false;
+        this.module.HEAPU8.set(data, pointer);
+        return this.module._gba_state_load(data.length) === 1;
+    }
+}
+
+let modulePromise: Promise<MgbaModule> | null = null;
+
+/** mGBA の WASM を読み込む（1 回だけ。失敗したら次に呼んだときに読み直す） */
+export const loadMgba = (): Promise<MgbaModule> => {
+    modulePromise ??= createMgbaCore({ locateFile: () => wasmUrl }).catch(
+        (err: unknown) => {
+            modulePromise = null;
+            throw err;
+        },
+    );
+    return modulePromise;
+};

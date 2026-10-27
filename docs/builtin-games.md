@@ -36,10 +36,10 @@ games/
 |---|---|---|
 | `name` | 要る | メニューに出す名前 |
 | `description` | 要る | メニューに出す説明 |
-| `system` | 要る | `gb`（白黒のゲームボーイ用）か `gbc`（ゲームボーイカラー対応）。ROM のヘッダの CGB フラグ（0x143 の bit 7）と合っていないとビルドが止まる。アプリはヘッダで GB / GBC のどちらで動かすかを決める |
+| `system` | 要る | `gb`（白黒のゲームボーイ用）か `gbc`（ゲームボーイカラー対応）か `gba`（ゲームボーイアドバンス。mGBA で動かす）。gb / gbc は ROM のヘッダの CGB フラグ（0x143 の bit 7）と、gba はヘッダが GBA の形（3 バイト目が 0xEA、0xB2 が 0x96）と合っていないとビルドが止まる。アプリはヘッダ（と名前の .gba）でどれで動かすかを決める |
 | `rom` | 要る | できた ROM の場所（game.json からの相対パス）。リポジトリに入っている ROM をそのまま配信する |
 | `builtBy` | 任意 | Makefile が無いゲームの作り方のメモ（`scripts/build-games.sh` が出すだけ） |
-| `toolchain` | 任意 | `gbdk` なら GBDK-2020 が要る。無いときは `scripts/build-games.sh --check` が確かめずに飛ばす |
+| `toolchain` | 任意 | `gbdk` なら GBDK-2020、`llvm` なら Homebrew の llvm と lld（GBA。`games/gba-bench/README.md`）が要る。無いときは `scripts/build-games.sh --check` が確かめずに飛ばす |
 | `saveFormat` | 任意 | ゲーム内セーブの形式の番号（既定 1）。下の「版が上がったときのセーブ」 |
 
 ## ビルド
@@ -77,7 +77,7 @@ game.json には `"system": "gbc"`、`"toolchain": "gbdk"`、`"rom": "mygame.gbc
 
 - `app/plugins/builtinGames.ts`（vite のプラグイン）が `games/*/game.json` を読み、ROM の SHA-256 と大きさを測って目録を作る。
   - アプリには目録を `virtual:builtin-games` として渡す（JS に入る。目録を取りに行く通信は無い）。
-  - 本番ビルドでは `dist/builtin/<id>-<SHA-256 の頭 12 文字>.gb(c)` に ROM を、`dist/builtin/index.json` に目録（`id`・`name`・`description`・`system`・`sha256`・`size`・`file`・`saveFormat`）を出す。ROM の名前は中身で変わるので、版が上がると別のファイルになる。
+  - 本番ビルドでは `dist/builtin/<id>-<SHA-256 の頭 12 文字>.gb(c)`（GBA は `.gba`） に ROM を、`dist/builtin/index.json` に目録（`id`・`name`・`description`・`system`・`sha256`・`size`・`file`・`saveFormat`）を出す。ROM の名前は中身で変わるので、版が上がると別のファイルになる。
   - 開発サーバー（`npm run dev`）では `/builtin/` の下で同じものを返す。`games/` や ROM を書き換えると読み直して画面を再読み込みする。
 - `app/scripts/generate-sw.mjs` は、これまで通り dist の ROM・セーブを見つけたらビルドを止める。ただし `dist/builtin/index.json` に載っていて、中身の SHA-256 と大きさが目録と合う `dist/builtin/` の ROM だけは通す。目録に載っていない ROM や、`builtin/` の外の ROM は止まる。
 - Service Worker は dist の中身を全部事前キャッシュするので、内蔵ソフトの ROM と目録も入る。オフラインでも選べる。
