@@ -16,7 +16,7 @@ games/
     build/              … ビルドの途中の生成物（git に入れない）
 ```
 
-いまは通信テスト（`games/linktest/`）と、テイマーズライフ（`games/tamers-life/`、GBDK-2020 製、作っているところ）の 2 つ。通信テストの ROM とソースは `testroms/link/` にある（RGBDS 製。コアの試験 `core/tests/link.rs` もこの ROM を使うので動かしていない）。
+いまは通信テスト（`games/linktest/`）・テイマーズライフ（`games/tamers-life/`、GBDK-2020 製）・テイマーズライフの GBA 版（`games/tamers-life-gba/`、Rust の agb 製、作っているところ）・GBA ベンチ（`games/gba-bench/`）の 4 つ。通信テストの ROM とソースは `testroms/link/` にある（RGBDS 製。コアの試験 `core/tests/link.rs` もこの ROM を使うので動かしていない）。
 
 ### game.json
 
@@ -39,7 +39,7 @@ games/
 | `system` | 要る | `gb`（白黒のゲームボーイ用）か `gbc`（ゲームボーイカラー対応）か `gba`（ゲームボーイアドバンス。mGBA で動かす）。gb / gbc は ROM のヘッダの CGB フラグ（0x143 の bit 7）と、gba はヘッダが GBA の形（3 バイト目が 0xEA、0xB2 が 0x96）と合っていないとビルドが止まる。アプリはヘッダ（と名前の .gba）でどれで動かすかを決める |
 | `rom` | 要る | できた ROM の場所（game.json からの相対パス）。リポジトリに入っている ROM をそのまま配信する |
 | `builtBy` | 任意 | Makefile が無いゲームの作り方のメモ（`scripts/build-games.sh` が出すだけ） |
-| `toolchain` | 任意 | `gbdk` なら GBDK-2020、`llvm` なら Homebrew の llvm と lld（GBA。`games/gba-bench/README.md`）が要る。無いときは `scripts/build-games.sh --check` が確かめずに飛ばす |
+| `toolchain` | 任意 | `gbdk` なら GBDK-2020、`llvm` なら Homebrew の llvm と lld（GBA。`games/gba-bench/README.md`）、`agb` なら llvm と lld に加えて rustup の nightly と rust-src（GBA。Rust の agb。`games/tamers-life-gba/README.md`）が要る。無いときは `scripts/build-games.sh --check` が確かめずに飛ばす |
 | `saveFormat` | 任意 | ゲーム内セーブの形式の番号（既定 1）。下の「版が上がったときのセーブ」 |
 
 ## ビルド
