@@ -26,7 +26,7 @@ export const CONTROL_LAYOUTS: readonly {
         value: "onehand-b",
         label: "片手 B（ジェスチャー）",
         description:
-            "なぞる＝方向、タップ＝A、長押しかもう 1 本の指＝B。START・SELECT は右下",
+            "なぞる＝方向、タップ＝A、長押しかもう 1 本の指＝B。左下に A・B、右下に START・SELECT",
     },
 ];
 

@@ -688,6 +688,20 @@
     position: relative;
 }
 
+/*
+ * 左下の角の A・B。見た目は両手の .gbc-ab のまま（右上に A・左下に B）。少し小さくして角に寄せる。
+ * 右手の親指は右下の角を支点に弧を描くので、左下の角では弧が「左下から右上」へ向く。
+ * その向きに B・A を並べると、どちらも親指を伸ばした同じ距離で届き、B→A の滑らせもしやすい。
+ */
+.gbc-onehand-b-ab {
+    position: absolute;
+    left: 8px;
+    bottom: 8px;
+}
+.gbc-onehand-b-ab .gbc-ab {
+    --size: clamp(48px, 14cqw, 64px);
+}
+
 /* ---- メニュー ---- */
 
 .gbc-sheet-backdrop {

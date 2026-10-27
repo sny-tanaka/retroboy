@@ -1,7 +1,7 @@
 import { type RefObject, useEffect, useRef, useState } from "react";
 
 import type { GbButton, GbButtonHandlers } from "./buttons";
-import { hitRoundButtons } from "./ActionButtons";
+import { ActionButtons, hitRoundButtons } from "./ActionButtons";
 import { PUNI_SIZE, PuniVisual, trackPuni } from "./PuniPad";
 import { usePointerButtons } from "./usePointerButtons";
 
@@ -262,7 +262,8 @@ export interface GestureControlsProps extends GbButtonHandlers {
 
 /**
  * 片手 B「ジェスチャー」（右手で持つ）。操作部のどこでも、なぞる＝方向・タップ＝A・長押し（か 2 本目の指）＝B。
- * START・SELECT だけは右下の小さなボタン。
+ * START・SELECT は右下の小さなボタン。左下の角には、両手と同じ A・B のボタンも置く。
+ * どちらのボタンも操作面とは別の要素なので、押してもぷにコンは出ず、ジェスチャーとも取り合わない。
  */
 export const GestureControls = ({
     bTrigger = "both",
@@ -294,6 +295,10 @@ export const GestureControls = ({
                         <li key={hint}>{hint}</li>
                     ))}
                 </ul>
+            </div>
+            {/* 両手と同じく、右上に A・左下に B。右手の親指の付け根（右下の角）から見て弧に沿う向きになる */}
+            <div className="gbc-onehand-b-ab">
+                <ActionButtons {...handlers} />
             </div>
             <CornerStartSelect {...handlers} />
         </div>
