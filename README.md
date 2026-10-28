@@ -108,8 +108,8 @@ ROM の ID の計算（`crypto.subtle`）は HTTPS か `localhost` でしか動�
 - RGBDS（テスト ROM のビルド。テスト ROM はリポジトリに入っているので、ソースを直すときだけ要る。入っていれば `npm run check` がソースと ROM が合っているかも確かめる）
 - GBDK-2020 **4.5.0**（テイマーズライフの GB 版 `games/tamers-life/` のビルド。いまは内蔵ソフトから外してあり、`npm run check` は確かめない。`./scripts/build-games.sh tamers-life` と指定したときだけ要る。版が違うとできる ROM が変わり `--check` が止まるので、版をそろえる）
 - emsdk **5.0.7**（Emscripten。GBA のコアの mGBA を WASM にする `scripts/build-mgba.sh`。`npm run check` が使うので要る）と cmake・ninja
-- LLVM（Homebrew の `llvm` と `lld`。GBA のデモ `games/gba-bench/` とテイマーズライフ（GBA 試作）`games/tamers-life-gba/` のビルド。ROM はリポジトリに入っているので、ソースを直すときだけ要る。版は `games/gba-bench/README.md`）
-- Rust の nightly **nightly-2026-07-20** と rust-src（rustup で入れる。テイマーズライフ（GBA 試作）は Rust の agb **0.25.0** で作る。ROM はリポジトリに入っているので、ソースを直すときだけ要る。入っていれば `npm run check` がソースと ROM が合っているかも確かめる。入れ方は `games/tamers-life-gba/README.md`）
+- LLVM（Homebrew の `llvm` と `lld`。GBA のデモ `games/gba-bench/` とテイマーズライフ（GBA 版）`games/tamers-life-gba/` のビルド。ROM はリポジトリに入っているので、ソースを直すときだけ要る。版は `games/gba-bench/README.md`）
+- Rust の nightly **nightly-2026-07-20** と rust-src（rustup で入れる。テイマーズライフ（GBA 版）は Rust の agb **0.25.0** で作る。ROM はリポジトリに入っているので、ソースを直すときだけ要る。入っていれば `npm run check` がソースと ROM が合っているかも確かめる。入れ方は `games/tamers-life-gba/README.md`）
 - python3（標準のものだけ。テイマーズライフの文とフォントの変換 `games/tamers-life/tools/text.py` に使う。macOS には入っている）
 
 macOS（Homebrew）の例:
@@ -119,7 +119,7 @@ brew install rustup wasm-pack rgbds
 # rustup は keg-only なので PATH に入らない。scripts/build-wasm.sh は自動で rustup 側を優先する
 "$(brew --prefix rustup)/bin/rustup" default stable
 "$(brew --prefix rustup)/bin/rustup" target add wasm32-unknown-unknown
-# テイマーズライフ（GBA 試作）のビルドだけに要る（Homebrew の rust はそのままでよい）
+# テイマーズライフ（GBA 版）のビルドだけに要る（Homebrew の rust はそのままでよい）
 "$(brew --prefix rustup)/bin/rustup" toolchain install nightly-2026-07-20 --profile minimal --component rust-src
 ```
 
