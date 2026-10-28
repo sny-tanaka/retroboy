@@ -41,6 +41,7 @@ games/
 | `builtBy` | 任意 | Makefile が無いゲームの作り方のメモ（`scripts/build-games.sh` が出すだけ） |
 | `toolchain` | 任意 | `gbdk` なら GBDK-2020、`llvm` なら Homebrew の llvm と lld（GBA。`games/gba-bench/README.md`）、`agb` なら llvm と lld に加えて rustup の nightly と rust-src（GBA。Rust の agb。`games/tamers-life-gba/README.md`）が要る。無いときは `scripts/build-games.sh --check` が確かめずに飛ばす |
 | `saveFormat` | 任意 | ゲーム内セーブの形式の番号（既定 1）。下の「版が上がったときのセーブ」 |
+| `guide` | 任意 | 攻略サイトの場所（dist の中のフォルダ。例 `"guide/"`）。あれば、そのゲームを遊んでいるときにメニューに「攻略」が出て、画面いっぱいの重ね窓（iframe）で開く。テイマーズライフ GBA 版の攻略は `app/guide/index.html`（データは `games/tamers-life-gba/tools/guide_data.py` が書き出す） |
 | `builtin` | 任意 | `false` なら内蔵ソフトに入れない（既定 `true`）。下の「外し方」 |
 
 ## ビルド
@@ -78,7 +79,7 @@ game.json には `"system": "gbc"`、`"toolchain": "gbdk"`、`"rom": "mygame.gbc
 
 - `app/plugins/builtinGames.ts`（vite のプラグイン）が `games/*/game.json` を読み、ROM の SHA-256 と大きさを測って目録を作る。
   - アプリには目録を `virtual:builtin-games` として渡す（JS に入る。目録を取りに行く通信は無い）。
-  - 本番ビルドでは `dist/builtin/<id>-<SHA-256 の頭 12 文字>.gb(c)`（GBA は `.gba`） に ROM を、`dist/builtin/index.json` に目録（`id`・`name`・`description`・`system`・`sha256`・`size`・`file`・`saveFormat`）を出す。ROM の名前は中身で変わるので、版が上がると別のファイルになる。
+  - 本番ビルドでは `dist/builtin/<id>-<SHA-256 の頭 12 文字>.gb(c)`（GBA は `.gba`） に ROM を、`dist/builtin/index.json` に目録（`id`・`name`・`description`・`system`・`sha256`・`size`・`file`・`saveFormat`・`guide`）を出す。ROM の名前は中身で変わるので、版が上がると別のファイルになる。
   - 開発サーバー（`npm run dev`）では `/builtin/` の下で同じものを返す。`games/` や ROM を書き換えると読み直して画面を再読み込みする。
 - `app/scripts/generate-sw.mjs` は、これまで通り dist の ROM・セーブを見つけたらビルドを止める。ただし `dist/builtin/index.json` に載っていて、中身の SHA-256 と大きさが目録と合う `dist/builtin/` の ROM だけは通す。目録に載っていない ROM や、`builtin/` の外の ROM は止まる。
 - Service Worker は dist の中身を全部事前キャッシュするので、内蔵ソフトの ROM と目録も入る。オフラインでも選べる。

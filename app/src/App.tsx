@@ -39,6 +39,7 @@ import { LoadStateConfirm } from "./ui/ConfirmDialog";
 import { type ControlLayout, useControlLayout } from "./ui/controlLayout";
 import { GbcBody } from "./ui/GbcBody";
 import { describeLink, describeWaiting } from "./ui/LinkMenu";
+import { GuideOverlay } from "./ui/GuideOverlay";
 import { MenuSheet } from "./ui/MenuSheet";
 import { PerfOverlay } from "./ui/PerfOverlay";
 import { usePerfOverlaySetting } from "./ui/perfOverlaySetting";
@@ -225,10 +226,19 @@ const App = () => {
             ? status.rom.id
             : null;
 
+    // いま遊んでいる内蔵ソフトの攻略サイト（game.json の "guide"）
+    const currentGuide =
+        session.builtinGames.find(game => game.sha256 === currentRomId)
+            ?.guide ?? null;
+
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const romInputRef = useRef<HTMLInputElement>(null);
     const loadStateRef = useRef<HTMLInputElement>(null);
     const [menuOpen, setMenuOpen] = useState(false);
+    // 攻略の重ね窓（メニューの上に出す。メニューを開いたままなのでゲームは止まったまま）。
+    // 一度開いたら guideSrc を残し、とじても iframe を隠すだけにする（見ていたページとスクロールの位置が残る）
+    const [guideOpen, setGuideOpen] = useState(false);
+    const [guideSrc, setGuideSrc] = useState<string | null>(null);
     // 開いているロードの確認。"slot" は画面の「ロード」（端末内のセーブ）、"file" はメニューの「ファイルから読み込む」
     const [confirmingLoad, setConfirmingLoad] = useState<
         "slot" | "file" | null
@@ -290,6 +300,7 @@ const App = () => {
     };
     const closeMenu = (): void => {
         setMenuOpen(false);
+        setGuideOpen(false);
         release("menu");
     };
 
@@ -523,7 +534,11 @@ const App = () => {
                 onButtonDown={handleButtonDown}
                 onButtonUp={handleButtonUp}
             />
-            <MenuSheet open={menuOpen} onClose={closeMenu}>
+            <MenuSheet
+                open={menuOpen}
+                // 攻略を開いている間の Esc は攻略だけをとじる
+                onClose={guideOpen ? () => {} : closeMenu}
+            >
                 <RomMenu
                     roms={roms}
                     builtinGames={session.builtinGames}
@@ -557,8 +572,21 @@ const App = () => {
                     onTogglePerf={() => {
                         if (system) setPerfShown(system, !perfShown);
                     }}
+                    onOpenGuide={
+                        currentGuide === null
+                            ? null
+                            : () => {
+                                  setGuideSrc(currentGuide);
+                                  setGuideOpen(true);
+                              }
+                    }
                 />
             </MenuSheet>
+            <GuideOverlay
+                open={guideOpen && menuOpen}
+                src={guideSrc}
+                onClose={() => setGuideOpen(false)}
+            />
             <MenuSheet
                 open={linkConnectOpen}
                 onClose={closeLinkConnect}

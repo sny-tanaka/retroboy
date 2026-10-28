@@ -85,7 +85,10 @@ async function handleNavigation(request) {
             NAVIGATION_TIMEOUT_MS,
         );
     } catch {
-        const cached = await cache.match(SHELL_URL, { ignoreVary: true });
+        // そのページのキャッシュ（攻略サイトの guide/ など）。無ければアプリの index.html
+        const cached =
+            (await cache.match(request.url.split("#")[0], { ignoreVary: true, ignoreSearch: true })) ??
+            (await cache.match(SHELL_URL, { ignoreVary: true }));
         if (cached) return cached;
         return fetch(request);
     }

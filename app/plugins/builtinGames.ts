@@ -26,6 +26,7 @@ const MAX_GB_ROM_SIZE = 8 * 1024 * 1024;
 const MAX_GBA_ROM_SIZE = 32 * 1024 * 1024;
 const EXTENSIONS: Readonly<Record<BuiltinSystem, string>> = { gb: "gb", gbc: "gbc", gba: "gba" };
 const ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
+const GUIDE_PATTERN = /^[a-z0-9][a-z0-9-]*(\/[a-z0-9][a-z0-9-]*)*\/$/;
 
 interface LoadedGame {
     readonly game: BuiltinGame;
@@ -100,6 +101,11 @@ const makeGame = (
     data: Buffer,
 ): LoadedGame => {
     const saveFormat = json.saveFormat ?? 1;
+    // 攻略サイト（任意）: アプリと一緒に出す dist の中のフォルダ（例: guide/。app/guide/index.html から作る）
+    const guide = json.guide;
+    if (guide !== undefined && (typeof guide !== "string" || !GUIDE_PATTERN.test(guide))) {
+        fail(id, `"guide" は dist の中のフォルダ（例: "guide/"）にしてください。`);
+    }
     const sha256 = createHash("sha256").update(data).digest("hex");
     const extension = EXTENSIONS[system];
     return {
@@ -112,6 +118,7 @@ const makeGame = (
             size: data.length,
             file: `${OUT_DIR}/${id}-${sha256.slice(0, 12)}.${extension}`,
             saveFormat: saveFormat as number,
+            ...(guide === undefined ? {} : { guide: guide as string }),
         },
         romPath,
         data,

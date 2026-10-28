@@ -1,10 +1,12 @@
 /// <reference types="node" />
 import { execSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 
 import react from "@vitejs/plugin-react";
 import { defineConfig, type Plugin } from "vite";
 
 import { builtinGames } from "./plugins/builtinGames.ts";
+import { guideAssets } from "./plugins/guideAssets.ts";
 import { licenseFiles } from "./plugins/licenseFiles.ts";
 
 // git の結果。git が無い・リポジトリの外などで失敗したら null
@@ -59,7 +61,16 @@ export default defineConfig({
     // 本番ビルドは相対パスで参照する（GitHub Pages の https://sny-tanaka.github.io/retroboy-snap/ のような
     // サブパスでも、vite preview の / でも、そのまま動く）。開発サーバーでは "/" として扱われる
     base: "./",
-    plugins: [react(), versionFile(), builtinGames(), licenseFiles()],
+    plugins: [react(), versionFile(), builtinGames(), licenseFiles(), guideAssets()],
+    build: {
+        rollupOptions: {
+            // アプリ（index.html）と、テイマーズライフの攻略サイト（guide/index.html。アプリのメニューの「攻略」で重ね窓に出す）
+            input: {
+                main: fileURLToPath(new URL("index.html", import.meta.url)),
+                guide: fileURLToPath(new URL("guide/index.html", import.meta.url)),
+            },
+        },
+    },
     define: {
         __APP_VERSION__: JSON.stringify(appVersion),
         __BUILD_ID__: JSON.stringify(buildId),

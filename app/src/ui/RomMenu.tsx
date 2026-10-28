@@ -51,6 +51,8 @@ interface RomMenuProps {
     /** 速さの表示（画面の隅の fps）を出しているか。本体ごとに覚える */
     readonly perfShown: boolean;
     readonly onTogglePerf: () => void;
+    /** いま遊んでいる内蔵ソフトに攻略サイトがあれば、それを重ね窓で開く。無ければ null（「攻略」を出さない） */
+    readonly onOpenGuide: (() => void) | null;
 }
 
 /** メニューの一番上の「一時停止」「再開」。押すとメニューは閉じる（呼ぶ側で閉じる） */
@@ -204,6 +206,7 @@ export const RomMenu = ({
     system,
     perfShown,
     onTogglePerf,
+    onOpenGuide,
 }: RomMenuProps) => {
     const linked = link?.phase.kind === "open";
     const storage = storageStatus && formatStorage(storageStatus);
@@ -214,6 +217,17 @@ export const RomMenu = ({
                 disabled={!gameActive}
                 onTogglePause={onTogglePause}
             />
+            {onOpenGuide && (
+                <section className="gbc-menu-section">
+                    <h2 className="gbc-menu-heading">攻略</h2>
+                    <button type="button" className="gbc-menu-item" onClick={onOpenGuide}>
+                        攻略を見る（図鑑・技と職業・配合と相性）
+                    </button>
+                    <p className="gbc-menu-note">
+                        ゲームは止めたまま、画面いっぱいに開きます。「とじる」でこのメニューに戻ります。
+                    </p>
+                </section>
+            )}
             <LinkMenu
                 link={link}
                 onCloseLink={onCloseLink}

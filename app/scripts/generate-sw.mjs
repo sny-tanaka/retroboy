@@ -93,7 +93,10 @@ const template = await readFile(templatePath, "utf8");
 hash.update(template);
 const version = hash.digest("hex").slice(0, 16);
 
-const precache = cached.map((path) => (path === "index.html" ? "./" : path));
+// フォルダの index.html は、そのフォルダの URL で入れる（index.html → "./"、攻略サイトの guide/index.html → "guide/"）
+const precache = cached.map((path) =>
+    path === "index.html" ? "./" : path.endsWith("/index.html") ? path.slice(0, -"index.html".length) : path,
+);
 
 const header =
     `const VERSION = ${JSON.stringify(version)};\n` +

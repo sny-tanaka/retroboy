@@ -24,4 +24,6 @@ export interface BuiltinGame {
     readonly file: string;
     /** ゲーム内セーブの形式の番号。版が上がっても同じなら、前の版のゲーム内セーブを引き継ぐ */
     readonly saveFormat: number;
+    /** 攻略サイトの場所（dist の中の相対パス。例: guide/）。あれば、遊んでいるときにメニューの「攻略」で重ね窓に出す */
+    readonly guide?: string;
 }
