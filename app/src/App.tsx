@@ -35,7 +35,7 @@ import {
 } from "./pwa/registerServiceWorker";
 import useRomSession, { type SessionStatus } from "./session/useRomSession";
 import type { GbButton } from "./ui/buttons";
-import { LoadStateConfirm } from "./ui/ConfirmDialog";
+import { ConfirmDialog, LoadStateConfirm } from "./ui/ConfirmDialog";
 import { type ControlLayout, useControlLayout } from "./ui/controlLayout";
 import { GbcBody } from "./ui/GbcBody";
 import { describeLink, describeWaiting } from "./ui/LinkMenu";
@@ -43,7 +43,7 @@ import { GuideOverlay } from "./ui/GuideOverlay";
 import { MenuSheet } from "./ui/MenuSheet";
 import { PerfOverlay } from "./ui/PerfOverlay";
 import { usePerfOverlaySetting } from "./ui/perfOverlaySetting";
-import { RomMenu } from "./ui/RomMenu";
+import { describeOldSaves, RomMenu } from "./ui/RomMenu";
 
 // Game Boy と GBA の 1 秒あたりのフレームの数（4194304 / 70224 と 16777216 / 280896。どちらも 59.7275）
 const TARGET_FPS = 59.7275;
@@ -148,7 +148,13 @@ const ScreenMessage = ({
 const LinkConnect = lazy(() => import("./ui/LinkConnect"));
 
 // 一時停止の理由になる、開いているもの
-type Overlay = "menu" | "confirm" | "romPicker" | "statePicker" | "link";
+type Overlay =
+    | "menu"
+    | "confirm"
+    | "oldSavesConfirm"
+    | "romPicker"
+    | "statePicker"
+    | "link";
 type FilePicker = "romPicker" | "statePicker";
 
 // ファイル選択から戻ってきたあと、選んだファイルの change を待つ時間
@@ -343,6 +349,23 @@ const App = () => {
         release("confirm");
     };
 
+    // メニューの「古い版のセーブを消す」の確認。開いたときの古い版（ソフトの名前と版の数）を持つ
+    const [confirmingOldSaves, setConfirmingOldSaves] = useState<
+        readonly { name: string; versions: number }[] | null
+    >(null);
+    const openOldSavesConfirm = (
+        oldSaves: readonly { name: string; versions: number }[],
+    ): void => {
+        hold("oldSavesConfirm");
+        setConfirmingOldSaves(oldSaves);
+    };
+    const closeOldSavesConfirm = (): void => {
+        setConfirmingOldSaves(null);
+        release("oldSavesConfirm");
+    };
+    // メニューを出すときに数える（localStorage を見るので、開いている間だけ）
+    const oldSaves = menuOpen ? session.listOldSaves() : [];
+
     // クリックの中で呼ぶ（ファイル選択は利用者の操作の中でしか開けない）
     const pickFile = (picker: FilePicker): void => {
         const input = (picker === "romPicker" ? romInputRef : loadStateRef)
@@ -518,7 +541,12 @@ const App = () => {
                 powerOn={running}
                 paused={paused}
                 gameActive={running}
-                inert={menuOpen || confirmingLoad !== null || linkConnectOpen}
+                inert={
+                    menuOpen ||
+                    confirmingLoad !== null ||
+                    confirmingOldSaves !== null ||
+                    linkConnectOpen
+                }
                 speed={session.speed}
                 onCycleSpeed={session.cycleSpeed}
                 linkLabel={linkLabel}
@@ -580,6 +608,12 @@ const App = () => {
                                   setGuideOpen(true);
                               }
                     }
+                    oldSaves={oldSaves}
+                    onDeleteOldSaves={() => {
+                        // 確認を先に開いてからメニューを閉じる（その間に再開しないように）
+                        openOldSavesConfirm(oldSaves);
+                        closeMenu();
+                    }}
                 />
             </MenuSheet>
             <GuideOverlay
@@ -618,6 +652,17 @@ const App = () => {
                     closeLoadConfirm();
                 }}
                 onCancel={closeLoadConfirm}
+            />
+            <ConfirmDialog
+                open={confirmingOldSaves !== null}
+                title="古い版のセーブを消しますか？"
+                message={`内蔵ソフトの古い版のゲーム内セーブ（${describeOldSaves(confirmingOldSaves ?? [])}）を消します。いまの版のセーブは残ります。新しい版で続きから遊べることを確かめてから消してください。消したセーブは戻せません。`}
+                confirmLabel="消す"
+                onConfirm={() => {
+                    void session.deleteOldSaves();
+                    closeOldSavesConfirm();
+                }}
+                onCancel={closeOldSavesConfirm}
             />
             {/* accept は付けない（iOS は .gb / .gbc / .gba / .rbs を知らず、ファイルを選べなくなることがある） */}
             <input

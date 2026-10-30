@@ -89,6 +89,10 @@ export const flushPendingSaves = (): void => {
     [...pendingWrites.keys()].forEach(writeNow);
 };
 
+/** localStorage のキーに、書き出していない書き込み待ちがあるか（古い版のセーブを消すとき、これがあれば消さない） */
+export const hasPendingWrite = (key: string): boolean =>
+    pendingWrites.has(key) || pendingRam?.key === key;
+
 // 書き込み待ちにするだけ。書き出すのは SAVE_INTERVAL ごとか flushPendingSaves のとき
 const scheduleWrite = (key: string, value: string | Uint8Array): void => {
     if (writeBlockedKeys.has(key)) return;

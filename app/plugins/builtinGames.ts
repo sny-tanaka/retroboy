@@ -1,13 +1,15 @@
 /// <reference types="node" />
 // 内蔵ソフト（リポジトリの games/<id>/）をアプリに入れる vite のプラグイン。決まりは docs/builtin-games.md。
 //
-// - games/*/game.json を読み、ROM の SHA-256・大きさを測って目録を作る。
+// - games/*/game.json を読み、ROM の SHA-256・大きさを測って目録を作る。git に入っている ROM の履歴から、
+//   これまでの版（pastVersions。新しい順に SHA-256 とそのときの saveFormat）も入れる。
 // - アプリには目録を virtual:builtin-games として渡す（JS に入るので、目録を取りに行く通信は要らない）。
 // - 本番ビルドでは dist/builtin/ に ROM（名前に SHA-256 の頭を付ける）と目録 index.json を出す。
 //   scripts/generate-sw.mjs は index.json に載っている ROM だけを配信してよいものとして通す。
 // - 開発サーバーでは /builtin/ の下で同じものを返す。games/ を書き換えたら読み直して画面を再読み込みする。
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { readdir, readFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -118,11 +120,135 @@ const makeGame = (
             size: data.length,
             file: `${OUT_DIR}/${id}-${sha256.slice(0, 12)}.${extension}`,
             saveFormat: saveFormat as number,
+            pastVersions: [], // loadGames で入れる
             ...(guide === undefined ? {} : { guide: guide as string }),
         },
         romPath,
         data,
     };
+};
+
+// ROM の git の履歴の blob の ID → 中身の SHA-256（ROM は 1 版で数 MB あるので、読んだものを覚えておく）
+const HISTORY_CACHE = resolve(dirname(fileURLToPath(import.meta.url)), "../node_modules/.cache/builtin-rom-history.json");
+
+const git = (args: string[], input?: string): Buffer =>
+    execFileSync("git", ["-C", GAMES_DIR, ...args], {
+        input,
+        maxBuffer: 256 * 1024 * 1024,
+        stdio: ["pipe", "pipe", "ignore"],
+    });
+
+// git cat-file --batch で、名前（<コミット>:<パス> や blob の ID）ごとに中身を読む（並びは names と同じ。無ければ null）。
+// 出力は「<oid> blob <長さ>\n<中身>\n」か「<名前> missing\n」の並び
+const readBlobs = (names: readonly string[]): (Buffer | null)[] => {
+    if (names.length === 0) return [];
+    const out = git(["cat-file", "--batch"], names.map(name => `${name}\n`).join(""));
+    const blobs: (Buffer | null)[] = [];
+    let at = 0;
+    while (at < out.length && blobs.length < names.length) {
+        const end = out.indexOf(0x0a, at);
+        if (end < 0) break;
+        const header = out.subarray(at, end).toString().split(" ");
+        at = end + 1;
+        if (header[1] !== "blob") {
+            blobs.push(null);
+            continue;
+        }
+        const size = Number(header[2]);
+        blobs.push(out.subarray(at, at + size));
+        at += size + 1;
+    }
+    if (blobs.length !== names.length) throw new Error("git cat-file の出力を読めませんでした。");
+    return blobs;
+};
+
+// ある版の game.json の saveFormat（無い・読めなければ undefined＝分からない）
+const saveFormatOf = (json: Buffer | null): number | undefined => {
+    if (!json) return undefined;
+    try {
+        const value = (JSON.parse(json.toString()) as Record<string, unknown>).saveFormat ?? 1;
+        return Number.isInteger(value) ? (value as number) : undefined;
+    } catch {
+        return undefined;
+    }
+};
+
+/**
+ * git に入っている ROM の、これまでの版（新しい順）。sha256 は ROM の中身の SHA-256、saveFormat はそのコミットの
+ * games/<id>/game.json の値（分からなければ無し）。ROM を git に入れていない・git が無ければ空
+ * （一覧に無い版のセーブは消さないので、足りない分は「消さない」側に倒れる）
+ */
+const readRomHistory = async (
+    id: string,
+    romPath: string,
+    cache: Record<string, string>,
+): Promise<BuiltinGame["pastVersions"]> => {
+    try {
+        // 名前を変えた前も辿る。コミットの行のあとに「:<旧 mode> <新 mode> <旧 blob> <新 blob> <状態>\t<パス>」が続く
+        const log = git(["log", "--follow", "--format=commit %H", "--raw", "--no-abbrev", "--", romPath]).toString();
+        const commits: { commit: string; oid: string }[] = [];
+        let commit: string | null = null;
+        for (const line of log.split("\n")) {
+            const header = /^commit ([0-9a-f]+)$/.exec(line);
+            if (header) {
+                commit = header[1];
+                continue;
+            }
+            const raw = /^:\S+ \S+ [0-9a-f]+ ([0-9a-f]+) /.exec(line);
+            if (raw && commit && !/^0+$/.test(raw[1])) commits.push({ commit, oid: raw[1] });
+        }
+        // ROM の中身の SHA-256（覚えていないものだけ、少しずつ読む）
+        const missing = [...new Set(commits.map(({ oid }) => oid))].filter(oid => !cache[oid]);
+        for (let i = 0; i < missing.length; i += 16) {
+            const chunk = missing.slice(i, i + 16);
+            readBlobs(chunk).forEach((blob, index) => {
+                if (blob) cache[chunk[index]] = createHash("sha256").update(blob).digest("hex");
+            });
+        }
+        const formats = readBlobs(commits.map(({ commit }) => `${commit}:games/${id}/game.json`)).map(saveFormatOf);
+        const versions = new Map<string, number | undefined>();
+        commits.forEach(({ oid }, index) => {
+            const sha256 = cache[oid];
+            // 同じ中身の版が何度か出てきたら（戻したとき）、いちばん新しいものの位置と形式にする
+            if (sha256 && !versions.has(sha256)) versions.set(sha256, formats[index]);
+        });
+        return [...versions].map(([sha256, saveFormat]) => ({
+            sha256,
+            ...(saveFormat === undefined ? {} : { saveFormat }),
+        }));
+    } catch {
+        return [];
+    }
+};
+
+/** 内蔵ソフトごとの、これまでの版（新しい順。いまの内蔵ソフトのどれかの版は除く） */
+const loadPastVersions = async (
+    games: readonly LoadedGame[],
+): Promise<Map<string, BuiltinGame["pastVersions"]>> => {
+    const cache: Record<string, string> = await readFile(HISTORY_CACHE, "utf8").then(
+        text => JSON.parse(text) as Record<string, string>,
+        () => ({}),
+    );
+    const size = Object.keys(cache).length;
+    const current = new Set(games.map(({ game }) => game.sha256));
+    const result = new Map<string, BuiltinGame["pastVersions"]>();
+    for (const { game, romPath } of games) {
+        const history = await readRomHistory(game.id, romPath, cache);
+        // 版を戻して公開したときは、履歴の中でいまの版より新しい版に newer を付ける（自動では消さない）。
+        // いまの版が履歴に無い（コミットしていない）ときは、どれもいまの版より古い
+        const at = history.findIndex(({ sha256 }) => sha256 === game.sha256);
+        result.set(
+            game.id,
+            history
+                .map((version, index) => (index < at ? { ...version, newer: true as const } : version))
+                .filter(({ sha256 }) => !current.has(sha256)),
+        );
+    }
+    if (Object.keys(cache).length !== size) {
+        await mkdir(dirname(HISTORY_CACHE), { recursive: true });
+        await writeFile(HISTORY_CACHE, JSON.stringify(cache));
+    }
+    return result;
 };
 
 // games/ の下の game.json があるフォルダを、名前の順に読む。"builtin": false のもの（内蔵ソフトから外したゲーム）は読まない
@@ -150,7 +276,11 @@ const loadGames = async (): Promise<LoadedGame[]> => {
         if (other) fail(game.id, `ROM が games/${other} と同じです。`);
         seen.set(game.sha256, game.id);
     }
-    return games;
+    const past = await loadPastVersions(games);
+    return games.map(loaded => ({
+        ...loaded,
+        game: { ...loaded.game, pastVersions: past.get(loaded.game.id) ?? [] },
+    }));
 };
 
 export const builtinGames = (): Plugin => {

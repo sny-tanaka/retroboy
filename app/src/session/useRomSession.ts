@@ -44,7 +44,10 @@ import {
     BUILTIN_GAMES,
     builtinLastRomId,
     carryOverSave,
+    cleanUpOldSaves,
+    deleteOldBuiltinSaves,
     findBuiltinBySha,
+    listOldBuiltinSaves,
     loadBuiltinRom,
     resolveBuiltinLastRomId,
 } from "../storage/builtinGames";
@@ -500,7 +503,8 @@ const useRomSession = () => {
         if (bootedRef.current) return;
         bootedRef.current = true;
         void requestPersistentStorage().then(setStorageStatus);
-        void boot();
+        // 内蔵ソフトの古い版のセーブの掃除は、前回の ROM を開き終えてから（画面に知らせは出さない）
+        void boot().then(cleanUpOldSaves);
     }, []);
 
     useEffect(() => onSaveError(setNotice), []);
@@ -694,6 +698,20 @@ const useRomSession = () => {
         setNotice(await loadSaveStateFile(file));
     };
 
+    // メニューの「古い版のセーブを消す」で消せる内蔵ソフトの古い版（メニューを出すときに数える）
+    const listOldSaves = (): { name: string; versions: number }[] =>
+        listOldBuiltinSaves(roms.map(rom => rom.id));
+
+    // メニューの「古い版のセーブを消す」の確認で「消す」
+    const deleteOldSaves = async (): Promise<void> => {
+        try {
+            await deleteOldBuiltinSaves();
+            setNotice("内蔵ソフトの古い版のゲーム内セーブを消しました。");
+        } catch (err) {
+            setNotice(messageOf(err, "古い版のゲーム内セーブを消せませんでした。"));
+        }
+    };
+
     return {
         status,
         system,
@@ -720,6 +738,8 @@ const useRomSession = () => {
         loadFromSlot,
         exportStateFile,
         loadState,
+        listOldSaves,
+        deleteOldSaves,
     };
 };
 

@@ -53,7 +53,16 @@ interface RomMenuProps {
     readonly onTogglePerf: () => void;
     /** いま遊んでいる内蔵ソフトに攻略サイトがあれば、それを重ね窓で開く。無ければ null（「攻略」を出さない） */
     readonly onOpenGuide: (() => void) | null;
+    /** 内蔵ソフトの古い版のゲーム内セーブ（ソフトの名前と版の数）。無ければ空で、「古い版のセーブを消す」は押せない */
+    readonly oldSaves: readonly { name: string; versions: number }[];
+    readonly onDeleteOldSaves: () => void;
 }
+
+/** 「テイマーズライフ 2 版・通信テスト 1 版」 */
+export const describeOldSaves = (
+    oldSaves: readonly { name: string; versions: number }[],
+): string =>
+    oldSaves.map(({ name, versions }) => `${name} ${versions} 版`).join("・");
 
 /** メニューの一番上の「一時停止」「再開」。押すとメニューは閉じる（呼ぶ側で閉じる） */
 export const PauseMenu = ({
@@ -207,6 +216,8 @@ export const RomMenu = ({
     perfShown,
     onTogglePerf,
     onOpenGuide,
+    oldSaves,
+    onDeleteOldSaves,
 }: RomMenuProps) => {
     const linked = link?.phase.kind === "open";
     const storage = storageStatus && formatStorage(storageStatus);
@@ -351,6 +362,19 @@ export const RomMenu = ({
                 ) : (
                     <p className="gbc-menu-note">確認中…</p>
                 )}
+                <button
+                    type="button"
+                    className="gbc-menu-item"
+                    disabled={oldSaves.length === 0}
+                    onClick={onDeleteOldSaves}
+                >
+                    古い版のセーブを消す
+                </button>
+                <p className="gbc-menu-note">
+                    {oldSaves.length === 0
+                        ? "内蔵ソフトの古い版のゲーム内セーブはありません。"
+                        : `内蔵ソフトの古い版のゲーム内セーブ（${describeOldSaves(oldSaves)}）が残っています。新しい版で続きから遊べることを確かめてから消してください。`}
+                </p>
                 <p className="gbc-menu-note">
                     キーボード: 方向 = 矢印キー / A = Z / B = X / START = Enter
                     / SELECT = Space / L = A / R = S（L・R は GBA だけ）

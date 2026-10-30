@@ -5,11 +5,25 @@
 //   （アプリの版と ROM がいつも揃い、古い版が端末に溜まらない。利用者の ROM の一覧にも混ざらない）。
 // - ROM の ID は利用者の ROM と同じく中身の SHA-256 なので、ゲーム内セーブ・セーブステートは版ごとに分かれる。
 //   版が上がって中身が変わったら、ゲーム内セーブだけを前の版から写す（saveFormat が同じとき。carryOverSave）。
+//   古い版は端末に溜めない。セーブステートは版が変わったら消し、ゲーム内セーブは自動ではいまの版と 1 つ前の版などを
+//   残して消す（cleanUpOldSaves）。1 つ前の版は、利用者がメニューの「古い版のセーブを消す」で消す。
 // - 前回の ROM（lastRomId）には SHA-256 ではなく "builtin:<id>" を覚え、版が上がっても新しい版を開く。
 import builtinGames from "virtual:builtin-games";
 
+import { hasPendingWrite } from "../emulator/cartridgeEffects";
 import type { BuiltinGame } from "./builtinGame";
-import { type RomRecord, RomStorageError } from "./romDb";
+import {
+    carryOverSaveIn,
+    manualStaleVersions,
+    pruneGameSaves,
+    removeManualStaleSaves,
+} from "./builtinSaves";
+import {
+    listRoms,
+    pruneSaveStates,
+    type RomRecord,
+    RomStorageError,
+} from "./romDb";
 import { computeRomId } from "./romId";
 
 export type { BuiltinGame } from "./builtinGame";
@@ -58,69 +72,77 @@ export const loadBuiltinRom = async (game: BuiltinGame): Promise<RomRecord> => {
     return { id: game.sha256, name: game.name, data, createdAt: 0 };
 };
 
-// 前に遊んだ版。localStorage `builtinSave:<id>` に { sha256, saveFormat } を持つ
-interface PlayedVersion {
-    readonly sha256: string;
-    readonly saveFormat: number;
-}
-
-const playedKey = (game: BuiltinGame): string => `builtinSave:${game.id}`;
-
-const readPlayed = (game: BuiltinGame): PlayedVersion | null => {
-    try {
-        const value: unknown = JSON.parse(
-            localStorage.getItem(playedKey(game)) ?? "null",
-        );
-        if (
-            typeof value === "object" &&
-            value !== null &&
-            "sha256" in value &&
-            typeof value.sha256 === "string" &&
-            "saveFormat" in value &&
-            typeof value.saveFormat === "number"
-        ) {
-            return { sha256: value.sha256, saveFormat: value.saveFormat };
-        }
-    } catch {
-        // 読めなければ、前の版は無かったことにする
-    }
-    return null;
-};
-
-// cartridgeEffects.ts のキーと同じ
-const SAVE_KINDS = ["sram", "rtc"] as const;
-
 /**
  * 内蔵ソフトを始める前（initializeEmulator がゲーム内セーブを読む前、書き込み待ちを書き出したあと）に呼ぶ。
  * 前に遊んだ版と中身が違い、saveFormat が同じなら、前の版のゲーム内セーブ（セーブ RAM・RTC）を
- * いまの版の ID に写す（いまの版にまだゲーム内セーブが無いときだけ。前の版のものは消さずに残す）。
+ * いまの版の ID に写す（いまの版にまだゲーム内セーブが無いときだけ）。ここでは何も消さない（carryOverSaveIn）。
  * セーブステートは ROM が違うと戻せないので写さない（いまの版では「セーブがありません」から始まる）。
  */
 export const carryOverSave = (game: BuiltinGame): void => {
     try {
-        const played = readPlayed(game);
-        if (
-            played &&
-            played.sha256 !== game.sha256 &&
-            played.saveFormat === game.saveFormat
-        ) {
-            for (const kind of SAVE_KINDS) {
-                const from = localStorage.getItem(`${kind}:${played.sha256}`);
-                const to = `${kind}:${game.sha256}`;
-                if (from !== null && localStorage.getItem(to) === null) {
-                    localStorage.setItem(to, from);
-                }
-            }
-        }
-        localStorage.setItem(
-            playedKey(game),
-            JSON.stringify({
-                sha256: game.sha256,
-                saveFormat: game.saveFormat,
-            } satisfies PlayedVersion),
-        );
+        carryOverSaveIn(localStorage, game);
     } catch (err) {
         // 写せなくても遊ぶのは続けられる（いまの版は空のゲーム内セーブで始まる。前の版のものは残っている）
         console.error("内蔵ソフトのゲーム内セーブを引き継げませんでした:", err);
     }
 };
+
+/**
+ * 起動時に 1 回呼ぶ。内蔵ソフトの過去の版（目録の pastVersions）のセーブステートの枠と、いまの版・1 つ前の版などを
+ * 残した古い版のゲーム内セーブ（builtinSaves.ts の pruneGameSaves）を消す。利用者の ROM（roms にある ID）のものは
+ * 消さない。roms が読めなければ何も消さない
+ */
+export const cleanUpOldSaves = async (): Promise<void> => {
+    let pruned: { romIds: string[]; deleted: number };
+    try {
+        pruned = await pruneSaveStates(BUILTIN_GAMES);
+    } catch (err) {
+        console.warn("古い版のセーブを掃除しませんでした:", err);
+        return;
+    }
+    let gameSaves = 0;
+    try {
+        gameSaves = pruneGameSaves(
+            localStorage,
+            BUILTIN_GAMES,
+            pruned.romIds,
+            hasPendingWrite,
+        );
+    } catch (err) {
+        console.warn("古い版のゲーム内セーブを掃除できませんでした:", err);
+    }
+    if (pruned.deleted > 0 || gameSaves > 0) {
+        console.info(
+            `古い版のセーブを消しました（セーブステート ${pruned.deleted} 件、ゲーム内セーブ ${gameSaves} 件）`,
+        );
+    }
+};
+
+/** メニューの「古い版のセーブを消す」で消せる古い版（内蔵ソフトの名前と版の数）。romIds は利用者の ROM の ID */
+export const listOldBuiltinSaves = (
+    romIds: readonly string[],
+): { name: string; versions: number }[] => {
+    try {
+        return manualStaleVersions(localStorage, BUILTIN_GAMES, romIds).map(
+            ({ game, ids }) => ({ name: game.name, versions: ids.length }),
+        );
+    } catch {
+        return [];
+    }
+};
+
+/**
+ * メニューの「古い版のセーブを消す」の「はい」。いまの版以外の内蔵ソフトの過去の版のゲーム内セーブを消す。
+ * 利用者の ROM は消す直前に roms から読み直す（読めなければ何も消さず、RomStorageError）
+ */
+export const deleteOldBuiltinSaves = async (): Promise<void> => {
+    const romIds = (await listRoms()).map(rom => rom.id);
+    const removed = removeManualStaleSaves(
+        localStorage,
+        BUILTIN_GAMES,
+        romIds,
+        hasPendingWrite,
+    );
+    console.info(`古い版のゲーム内セーブを消しました（${removed} 件）`);
+};
+

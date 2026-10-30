@@ -1,6 +1,8 @@
 // ROM を端末内（IndexedDB）に保存する。設計書 3 章の roms / settings ストアと、
 // 画面の「セーブ」「ロード」で使うセーブステートの枠（saveStates ストア、ROM ごとに 1 件）。
 // ROM はここ以外へは出さない（外部への送信・ログ出力をしない）。
+import type { BuiltinGame } from "./builtinGame";
+import { staleSaveStateIds } from "./builtinSaves";
 import { computeRomId } from "./romId";
 import {
     detectRomSystem,
@@ -368,4 +370,33 @@ export const getSaveState = (romId: string): Promise<SaveStateRecord | null> =>
             };
         }
         return record;
+    });
+
+/**
+ * セーブステートの枠のうち、ROM の ID が内蔵ソフトの過去の版（目録の pastVersions）にあり、roms（利用者が
+ * 読み込んだ ROM）に無いものを消す（ROM が違うとロードできない）。roms を読むのと消すのを 1 つのトランザクションで
+ * 行い、その間に ROM が足されても取り違えないようにする。roms が読めなければ何も消さずに失敗する。
+ * 利用者の ROM の ID（このあと localStorage の掃除に使う）と、消した数を返す
+ */
+export const pruneSaveStates = (
+    games: readonly BuiltinGame[],
+): Promise<{ romIds: string[]; deleted: number }> =>
+    withDb(async db => {
+        const transaction = db.transaction(
+            [ROMS_STORE, SAVE_STATES_STORE],
+            "readwrite",
+        );
+        const done = transactionDone(transaction);
+        const saveStates = transaction.objectStore(SAVE_STATES_STORE);
+        const [romKeys, saveStateKeys] = await Promise.all([
+            requestToPromise(transaction.objectStore(ROMS_STORE).getAllKeys()),
+            requestToPromise(saveStates.getAllKeys()),
+        ]);
+        const romIds = romKeys.filter(
+            (key): key is string => typeof key === "string",
+        );
+        const stale = staleSaveStateIds(saveStateKeys, games, romIds);
+        stale.forEach(key => saveStates.delete(key));
+        await done;
+        return { romIds, deleted: stale.length };
     });

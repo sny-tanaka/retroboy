@@ -24,6 +24,17 @@ export interface BuiltinGame {
     readonly file: string;
     /** ゲーム内セーブの形式の番号。版が上がっても同じなら、前の版のゲーム内セーブを引き継ぐ */
     readonly saveFormat: number;
+    /**
+     * これまでの版（新しい順。いまの内蔵ソフトの版は除く）。sha256 は ROM の SHA-256、saveFormat はその版の
+     * ゲーム内セーブの形式（分からなければ無し）、newer は版を戻して公開したときの、いまの版より新しい版。
+     * 端末に残った古い版のセーブを消してよいかの判定に使い、ここに無い ID のセーブは消さない。
+     * git に入っている ROM の履歴から集める（plugins/builtinGames.ts）
+     */
+    readonly pastVersions: readonly {
+        readonly sha256: string;
+        readonly saveFormat?: number;
+        readonly newer?: true;
+    }[];
     /** 攻略サイトの場所（dist の中の相対パス。例: guide/）。あれば、遊んでいるときにメニューの「攻略」で重ね窓に出す */
     readonly guide?: string;
 }
