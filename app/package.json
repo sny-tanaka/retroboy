@@ -14,7 +14,7 @@
         "typecheck": "tsc --noEmit",
         "lint": "eslint .",
         "check": "npm run build:wasm && npm run build:mgba && npm run test:core && ../scripts/build-games.sh --check && npm run check:guide && npm run typecheck && npm run lint && vite build && node scripts/generate-sw.mjs",
-        "check:guide": "python3 -I -B ../games/tamers-life-gba/tools/guide_data.py --check",
+        "check:guide": "python3 -I -B ../games/tamers-life-gba/tools/guide_data.py --check && python3 -I -B ../games/tamers-life-gba/tools/guide_icons.py --check",
         "deploy": "../scripts/deploy-pages.sh"
     },
     "dependencies": {
