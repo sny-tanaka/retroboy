@@ -2,15 +2,18 @@
 // 内蔵ソフト（リポジトリの games/<id>/）をアプリに入れる vite のプラグイン。決まりは docs/builtin-games.md。
 //
 // - games/*/game.json を読み、ROM の SHA-256・大きさを測って目録を作る。git に入っている ROM の履歴から、
-//   これまでの版（pastVersions。新しい順に SHA-256 とそのときの saveFormat）も入れる。
+//   これまでの版（pastVersions。新しい順に SHA-256 とそのときの saveFormat）も入れる。git の履歴に無い古い版
+//   （ソースを別のリポジトリに移して、このリポジトリの履歴から消したもの）は games/<id>/past-versions.json に書いておき、後ろに足す。
+// - 攻略サイト（game.json の "guide"）は、games/<id>/ の同じ名前のフォルダにできたもの（index.html と、その参照する物）を置き、
+//   本番ビルドでは dist/<guide> にそのまま写す。開発サーバーでは /<guide> の下で同じものを返す。
 // - アプリには目録を virtual:builtin-games として渡す（JS に入るので、目録を取りに行く通信は要らない）。
 // - 本番ビルドでは dist/builtin/ に ROM（名前に SHA-256 の頭を付ける）と目録 index.json を出す。
 //   scripts/generate-sw.mjs は index.json に載っている ROM だけを配信してよいものとして通す。
 // - 開発サーバーでは /builtin/ の下で同じものを返す。games/ を書き換えたら読み直して画面を再読み込みする。
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, join, resolve, sep } from "node:path";
+import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { dirname, extname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import type { Plugin } from "vite";
@@ -34,6 +37,8 @@ interface LoadedGame {
     readonly game: BuiltinGame;
     readonly romPath: string;
     readonly data: Buffer;
+    /** 攻略サイトのできたもののフォルダ（games/<id>/<guide>。"guide" が無ければ null） */
+    readonly guideDir: string | null;
 }
 
 const fail = (id: string, message: string): never => {
@@ -103,7 +108,7 @@ const makeGame = (
     data: Buffer,
 ): LoadedGame => {
     const saveFormat = json.saveFormat ?? 1;
-    // 攻略サイト（任意）: アプリと一緒に出す dist の中のフォルダ（例: guide/。app/guide/index.html から作る）
+    // 攻略サイト（任意）: アプリと一緒に出す dist の中のフォルダ（例: guide/）。games/<id>/ の同じ名前のフォルダにできたものを置く
     const guide = json.guide;
     if (guide !== undefined && (typeof guide !== "string" || !GUIDE_PATTERN.test(guide))) {
         fail(id, `"guide" は dist の中のフォルダ（例: "guide/"）にしてください。`);
@@ -125,7 +130,41 @@ const makeGame = (
         },
         romPath,
         data,
+        guideDir: guide === undefined ? null : resolve(GAMES_DIR, id, guide as string),
     };
+};
+
+// 攻略サイトのフォルダの中のファイル（フォルダからの相対パス、/ 区切り、名前の順）
+const listGuideFiles = async (dir: string): Promise<string[]> => {
+    const walk = async (at: string): Promise<string[]> => {
+        const entries = await readdir(at, { withFileTypes: true });
+        const files = await Promise.all(
+            entries
+                .filter(entry => !entry.name.startsWith("."))
+                .map(entry => (entry.isDirectory() ? walk(join(at, entry.name)) : Promise.resolve([join(at, entry.name)]))),
+        );
+        return files.flat();
+    };
+    return (await walk(dir)).map(path => relative(dir, path).split(sep).join("/")).sort();
+};
+
+// 攻略サイトに index.html があるか（無ければビルドを止める）
+const checkGuide = async ({ game, guideDir }: LoadedGame): Promise<void> => {
+    if (guideDir === null) return;
+    const index = await stat(join(guideDir, "index.html")).catch(() => null);
+    if (!index?.isFile()) {
+        fail(game.id, `攻略サイト（"guide": "${game.guide}"）の games/${game.id}/${game.guide}index.html がありません。`);
+    }
+};
+
+const CONTENT_TYPES: Readonly<Record<string, string>> = {
+    ".html": "text/html; charset=utf-8",
+    ".js": "text/javascript",
+    ".css": "text/css",
+    ".json": "application/json",
+    ".png": "image/png",
+    ".svg": "image/svg+xml",
+    ".webp": "image/webp",
 };
 
 // ROM の git の履歴の blob の ID → 中身の SHA-256（ROM は 1 版で数 MB あるので、読んだものを覚えておく）
@@ -221,6 +260,29 @@ const readRomHistory = async (
     }
 };
 
+// git の履歴に無い古い版（games/<id>/past-versions.json。新しい順の [{ sha256, saveFormat? }]。無ければ空）
+const readFrozenHistory = async (id: string): Promise<BuiltinGame["pastVersions"]> => {
+    const text = await readFile(join(GAMES_DIR, id, "past-versions.json"), "utf8").catch(() => null);
+    if (text === null) return [];
+    const list = JSON.parse(text) as unknown;
+    const ok =
+        Array.isArray(list) &&
+        list.every(
+            (v: unknown) =>
+                typeof v === "object" &&
+                v !== null &&
+                typeof (v as { sha256?: unknown }).sha256 === "string" &&
+                /^[0-9a-f]{64}$/.test((v as { sha256: string }).sha256) &&
+                ((v as { saveFormat?: unknown }).saveFormat === undefined ||
+                    Number.isInteger((v as { saveFormat?: unknown }).saveFormat)),
+        );
+    if (!ok) fail(id, "past-versions.json は [{ \"sha256\": \"<64 桁>\", \"saveFormat\": <整数> }] の並びにしてください。");
+    return (list as { sha256: string; saveFormat?: number }[]).map(({ sha256, saveFormat }) => ({
+        sha256,
+        ...(saveFormat === undefined ? {} : { saveFormat }),
+    }));
+};
+
 /** 内蔵ソフトごとの、これまでの版（新しい順。いまの内蔵ソフトのどれかの版は除く） */
 const loadPastVersions = async (
     games: readonly LoadedGame[],
@@ -233,7 +295,13 @@ const loadPastVersions = async (
     const current = new Set(games.map(({ game }) => game.sha256));
     const result = new Map<string, BuiltinGame["pastVersions"]>();
     for (const { game, romPath } of games) {
-        const history = await readRomHistory(game.id, romPath, cache);
+        // git の履歴（新しい）のあとに、履歴から消した古い版を足す（同じ中身の版は新しいほうの位置と形式にする）
+        const recent = await readRomHistory(game.id, romPath, cache);
+        const seenVersions = new Set(recent.map(({ sha256 }) => sha256));
+        const history = [
+            ...recent,
+            ...(await readFrozenHistory(game.id)).filter(({ sha256 }) => !seenVersions.has(sha256)),
+        ];
         // 版を戻して公開したときは、履歴の中でいまの版より新しい版に newer を付ける（自動では消さない）。
         // いまの版が履歴に無い（コミットしていない）ときは、どれもいまの版より古い
         const at = history.findIndex(({ sha256 }) => sha256 === game.sha256);
@@ -270,6 +338,7 @@ const loadGames = async (): Promise<LoadedGame[]> => {
         ids.push(entry.name);
     }
     const games = await Promise.all(ids.sort().map(loadGame));
+    await Promise.all(games.map(checkGuide));
     const seen = new Map<string, string>();
     for (const { game } of games) {
         const other = seen.get(game.sha256);
@@ -302,6 +371,16 @@ export const builtinGames = (): Plugin => {
             for (const { game, data } of loaded) {
                 this.emitFile({ type: "asset", fileName: game.file, source: data });
             }
+            for (const { game, guideDir } of loaded) {
+                if (guideDir === null || game.guide === undefined) continue;
+                for (const name of await listGuideFiles(guideDir)) {
+                    this.emitFile({
+                        type: "asset",
+                        fileName: `${game.guide}${name}`,
+                        source: await readFile(join(guideDir, name)),
+                    });
+                }
+            }
             this.emitFile({
                 type: "asset",
                 fileName: `${OUT_DIR}/index.json`,
@@ -325,6 +404,46 @@ export const builtinGames = (): Plugin => {
                 const module = server.moduleGraph.getModuleById(RESOLVED_VIRTUAL_ID);
                 if (module) server.moduleGraph.invalidateModule(module);
                 server.ws.send({ type: "full-reload" });
+            });
+            // 攻略サイト: /<guide> の下のファイル（フォルダの URL は index.html）
+            server.middlewares.use((req, res, next) => {
+                const url = decodeURIComponent(req.url?.split("?")[0] ?? "");
+                if (!url.startsWith(server.config.base)) {
+                    next();
+                    return;
+                }
+                const path = url.slice(server.config.base.length);
+                games().then(
+                    loaded => {
+                        const found = loaded.find(
+                            ({ game }) => game.guide !== undefined && (path.startsWith(game.guide) || `${path}/` === game.guide),
+                        );
+                        if (!found?.guideDir || found.game.guide === undefined) {
+                            next();
+                            return;
+                        }
+                        if (`${path}/` === found.game.guide) {
+                            res.statusCode = 301;
+                            res.setHeader("Location", `${server.config.base}${found.game.guide}`);
+                            res.end();
+                            return;
+                        }
+                        const rest = path.slice(found.game.guide.length) || "index.html";
+                        const file = resolve(found.guideDir, rest.endsWith("/") ? `${rest}index.html` : rest);
+                        if (!file.startsWith(`${found.guideDir}${sep}`) && file !== found.guideDir) {
+                            next();
+                            return;
+                        }
+                        readFile(file).then(
+                            data => {
+                                res.setHeader("Content-Type", CONTENT_TYPES[extname(file)] ?? "application/octet-stream");
+                                res.end(data);
+                            },
+                            () => next(),
+                        );
+                    },
+                    (err: unknown) => next(err),
+                );
             });
             const prefix = `${server.config.base}${OUT_DIR}/`;
             server.middlewares.use((req, res, next) => {

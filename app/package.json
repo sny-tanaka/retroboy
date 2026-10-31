@@ -17,8 +17,7 @@
         "typecheck": "tsc --noEmit",
         "test": "node --test --experimental-strip-types --disable-warning=ExperimentalWarning 'src/**/*.test.ts'",
         "lint": "eslint .",
-        "check": "npm run build:wasm && npm run build:mgba && npm run test:core && ../scripts/build-games.sh --check && npm run check:guide && npm run typecheck && npm run test && npm run lint && vite build && node scripts/generate-sw.mjs",
-        "check:guide": "python3 -I -B ../games/tamers-life-gba/tools/guide_data.py --check && python3 -I -B ../games/tamers-life-gba/tools/guide_icons.py --check",
+        "check": "npm run build:wasm && npm run build:mgba && npm run test:core && ../scripts/build-games.sh --check && npm run typecheck && npm run test && npm run lint && vite build && node scripts/generate-sw.mjs",
         "deploy": "../scripts/deploy-pages.sh"
     },
     "dependencies": {

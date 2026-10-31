@@ -16,7 +16,7 @@ games/
     build/              … ビルドの途中の生成物（git に入れない）
 ```
 
-いまは通信テスト（`games/linktest/`）・テイマーズライフの GBA 版（`games/tamers-life-gba/`、Rust の agb 製、作っているところ）・GBA ベンチ（`games/gba-bench/`）・GBA 通信テスト（`games/linktest-gba/`、C を llvm で。`docs/link-cable-design.md` 8.5）の 4 つ。テイマーズライフの GB 版（`games/tamers-life/`、GBDK-2020 製）は GBA 版に切り替えたので内蔵ソフトから外した（決定 #143）。フォルダは設計書（`docs/`）と道具（`tools/`）の置き場として残してある（下の「外し方」）。通信テストの ROM とソースは `testroms/link/` にある（RGBDS 製。コアの試験 `core/tests/link.rs` もこの ROM を使うので動かしていない）。
+いまは通信テスト（`games/linktest/`）・テイマーズライフ（`games/tamers-life-gba/`。GBA）・GBA ベンチ（`games/gba-bench/`）・GBA 通信テスト（`games/linktest-gba/`、C を llvm で。`docs/link-cable-design.md` 8.5）の 4 つ。テイマーズライフはソースを非公開の別のリポジトリ（tamers-life）で作り、ここには、できた ROM・`game.json`・攻略サイト（`guide/`）・ソースを移す前の版の一覧（`past-versions.json`）だけを置く（下の「ソースが別のリポジトリにあるゲーム」）。通信テストの ROM とソースは `testroms/link/` にある（RGBDS 製。コアの試験 `core/tests/link.rs` もこの ROM を使うので動かしていない）。
 
 ### game.json
 
@@ -39,9 +39,9 @@ games/
 | `system` | 要る | `gb`（白黒のゲームボーイ用）か `gbc`（ゲームボーイカラー対応）か `gba`（ゲームボーイアドバンス。mGBA で動かす）。gb / gbc は ROM のヘッダの CGB フラグ（0x143 の bit 7）と、gba はヘッダが GBA の形（3 バイト目が 0xEA、0xB2 が 0x96）と合っていないとビルドが止まる。アプリはヘッダ（と名前の .gba）でどれで動かすかを決める |
 | `rom` | 要る | できた ROM の場所（game.json からの相対パス）。リポジトリに入っている ROM をそのまま配信する |
 | `builtBy` | 任意 | Makefile が無いゲームの作り方のメモ（`scripts/build-games.sh` が出すだけ） |
-| `toolchain` | 任意 | `gbdk` なら GBDK-2020、`llvm` なら Homebrew の llvm と lld（GBA。`games/gba-bench/README.md`）、`agb` なら llvm と lld に加えて rustup の nightly と rust-src（GBA。Rust の agb。`games/tamers-life-gba/README.md`）が要る。無いときは `scripts/build-games.sh --check` が確かめずに飛ばす |
+| `toolchain` | 任意 | `gbdk` なら GBDK-2020、`llvm` なら Homebrew の llvm と lld（GBA。`games/gba-bench/README.md`）が要る。無いときは `scripts/build-games.sh --check` が確かめずに飛ばす |
 | `saveFormat` | 任意 | ゲーム内セーブの形式の番号（既定 1）。下の「版が上がったときのセーブ」 |
-| `guide` | 任意 | 攻略サイトの場所（dist の中のフォルダ。例 `"guide/"`）。あれば、そのゲームを遊んでいるときにメニューに「攻略」が出て、画面いっぱいの重ね窓（iframe）で開く。テイマーズライフ GBA 版の攻略は `app/guide/index.html`（データは `games/tamers-life-gba/tools/guide_data.py` が書き出す） |
+| `guide` | 任意 | 攻略サイトの場所（dist の中のフォルダ。例 `"guide/"`）。あれば、そのゲームを遊んでいるときにメニューに「攻略」が出て、画面いっぱいの重ね窓（iframe）で開く。`games/<id>/` の同じ名前のフォルダに、できたサイト（`index.html` と、それが相対パスで参照する物）を置く。`app/plugins/builtinGames.ts` が本番ビルドでは `dist/<guide>` にそのまま写し（Service Worker の事前キャッシュに入る）、開発サーバーでは `/<guide>` で返す。`index.html` が無ければビルドが止まる。テイマーズライフの攻略は tamers-life の `guide/` で作る |
 | `builtin` | 任意 | `false` なら内蔵ソフトに入れない（既定 `true`）。下の「外し方」 |
 
 ## ビルド
@@ -149,6 +149,19 @@ Safari の localStorage は 1 サイト 5MB ほどで、テイマーズライフ
 2. `./scripts/build-games.sh <id>` で ROM を作る。
 3. `cd app && npm run dev` で開き（開発サーバーは無音。音も確かめるときは `?sound=1` を付ける）、メニューの「内蔵ソフト」に出ることと動くことを確かめる。
 4. ソースと ROM をコミットする（`.gitignore` は `games/` の中の `*.gb` / `*.gbc` を例外にしてある）。
+
+## ソースが別のリポジトリにあるゲーム
+
+テイマーズライフ（`games/tamers-life-gba/`）は、ソース・素材・設計書・攻略サイトのソースを非公開のリポジトリ tamers-life に移し、このリポジトリの履歴からも消した（2026-10-31）。ここに置くのは配信するものだけ:
+
+| ファイル | 中身 |
+|---|---|
+| `tamers-life-gba.gba` | できた ROM |
+| `game.json` | 表示名・説明・`saveFormat`・`guide`（tamers-life のものをそのまま写す。Makefile は無いので `scripts/build-games.sh` は飛ばし、`builtBy` を出す） |
+| `guide/` | できた攻略サイト（`/guide/` で配信する） |
+| `past-versions.json` | ソースを移す前の版（新しい順の SHA-256 と `saveFormat`）。git の履歴から ROM の古い版が消えたので、ここに残しておき、`app/plugins/builtinGames.ts` が git の履歴の版のあとに足して `pastVersions` にする（古い版のセーブの掃除と「古い版のセーブを消す」に使う）。手で書き換えない |
+
+更新するときは、tamers-life で `scripts/export-to-retroboy.sh <このリポジトリ>` を流す（ROM がソースと合うか・攻略サイトの check を確かめてから、上の 3 つを写す）。そのあとここで `npm run check` を通してコミットし、`npm run deploy` で公開する。セーブは ROM の SHA-256 ごとなので、ROM を変えなければセーブはそのまま使える。
 
 ## 外し方
 

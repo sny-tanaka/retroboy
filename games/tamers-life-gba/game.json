@@ -1,0 +1,10 @@
+{
+    "name": "テイマーズライフ",
+    "description": "四季をなくした村で、魔物を仲間にして育て、配合して図鑑を埋める牧場 RPG。春夏秋冬の守り神をめざす旅と、畑・料理・牧場の暮らし、クリア後のゆめの種まで遊べる",
+    "system": "gba",
+    "rom": "tamers-life-gba.gba",
+    "toolchain": "agb",
+    "builtBy": "非公開のリポジトリ tamers-life の scripts/export-to-retroboy.sh（ソースはそちら。ここには、できた ROM と攻略サイトだけを置く）",
+    "saveFormat": 2,
+    "guide": "guide/"
+}

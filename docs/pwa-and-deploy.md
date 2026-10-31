@@ -144,8 +144,7 @@ Pages ではレスポンスヘッダーを変えられない（Netlify のとき
 |---|---|
 | `LICENSE.txt`・`NOTICE.txt` | このリポジトリの `LICENSE`（Apache-2.0）・`NOTICE` |
 | `licenses/retroboy-LICENSE.txt` | `core/upstream/LICENSE`（コアの Retro Boy、Apache-2.0） |
-| `licenses/misaki-font.txt` | `games/tamers-life/assets/font/misaki/misaki.txt`（美咲フォント） |
 | `licenses/react-LICENSE.txt` など | `app/node_modules/<パッケージ>/LICENSE`（JS のバンドルに入る npm のパッケージ） |
-| そのほかの `licenses/*.txt` | リポジトリの `licenses/`（ブート ROM の Bootix・SameBoy、WASM に入る Rust のクレートと標準ライブラリ、npm の配布物に LICENSE が無い qrcode-generator） |
+| そのほかの `licenses/*.txt` | リポジトリの `licenses/`（テイマーズライフの ROM に入る美咲フォントの説明書 `misaki-font.txt`、ブート ROM の Bootix・SameBoy、WASM に入る Rust のクレートと標準ライブラリ、npm の配布物に LICENSE が無い qrcode-generator） |
 
 Vite のバンドルは依存の著作権表示を残さない。そのため、バンドルに入った npm のパッケージがプラグインの `NPM_LICENSES` に無ければ、ビルドを止める。依存を足したら、`NPM_LICENSES` と `NOTICE` にも足す。Rust のクレートを足したときは、止まらないので自分で `licenses/` と `NOTICE` に足す（`cargo tree --manifest-path core/Cargo.toml --target wasm32-unknown-unknown -e normal` で、WASM に入るもの〔proc-macro でないもの〕を見る）。

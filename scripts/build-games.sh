@@ -8,7 +8,8 @@
 # - game.json の "toolchain" が "gbdk" のゲームは GBDK-2020 が要る（GBDK_HOME、既定は ~/.local/gbdk）。
 # - "toolchain" が "llvm" のゲーム（GBA）は Homebrew の llvm（clang・llvm-objcopy）と lld（ld.lld）が要る。
 # - "toolchain" が "agb" のゲーム（GBA。Rust の agb）は、上の llvm と lld に加えて、rustup で入れた
-#   games/<id>/rust-toolchain.toml の nightly（rust-src つき）が要る（games/tamers-life-gba/README.md）。
+#   games/<id>/rust-toolchain.toml の nightly（rust-src つき）が要る（games/<id>/README.md。いまは agb のゲームのソースは
+#   このリポジトリに無い。テイマーズライフは別のリポジトリで作る。docs/builtin-games.md の「ソースが別のリポジトリにあるゲーム」）。
 #
 # 使い方: scripts/build-games.sh [--check] [<id> ...]（id を省くと全部）
 #   --check: ビルドし直した ROM が、リポジトリに入っている ROM と同じかだけを確かめる（書き換えない）。

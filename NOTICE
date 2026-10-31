@@ -64,15 +64,15 @@ Emscripten の実行時のコード・C の標準ライブラリ（musl）・com
 - jsQR (https://github.com/cozmo/jsQR)（同じ画面）
   Licensed under the Apache License, Version 2.0. → licenses/jsqr-LICENSE.txt
 
-自作ゲーム「テイマーズライフ」（games/tamers-life/）の文字の形に、美咲フォントを使い、
-使う字だけを切り出して ROM（配信物）に含む。フォントのファイルは games/tamers-life/assets/font/misaki/ に置いている。
+自作ゲーム「テイマーズライフ」（内蔵ソフト games/tamers-life-gba/。ソースは非公開の別のリポジトリ）の文字の形に、
+美咲フォントを使い、使う字だけを切り出して ROM（配信物）に含む。
 - 美咲フォント 2021-05-05 版 (https://littlelimit.net/misaki.htm)
   Copyright (C) 2002-2021 Num Kadoma
   「These fonts are free softwares. Unlimited permission is granted to use, copy, and distribute it,
   with or without modification, either commercially and noncommercially.
   THESE FONTS ARE PROVIDED "AS IS" WITHOUT WARRANTY.」（同梱の misaki.txt の「ライセンス」）
   → licenses/misaki-font.txt
-  ▶ と ◀ は美咲フォントに無いので、自分で描いた（games/tamers-life/tools/text.py の CUSTOM）。
+  ▶ と ◀ は美咲フォントに無いので、自分で描いた。
 
 自作の GBA のデモ「GBA ベンチ」（games/gba-bench/）は、LLVM の clang と lld で作る。ライブラリ（libc・compiler-rt）は
 リンクしない（-nostdlib。起動のコード・字の形・sin の表も自分で書いた）ので、ROM に第三者のコードは入らない。
