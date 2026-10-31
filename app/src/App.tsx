@@ -152,6 +152,7 @@ type Overlay =
     | "menu"
     | "confirm"
     | "oldSavesConfirm"
+    | "stateSaveConfirm"
     | "romPicker"
     | "statePicker"
     | "link";
@@ -296,6 +297,11 @@ const App = () => {
         session.resume();
     };
 
+    // ゲーム内セーブを置き換えるかの問いが答えずに消えた（ROM を切り替えた・止めた）ときも、止めたのを外す
+    useEffect(() => {
+        if (!session.askingStateSave) release("stateSaveConfirm");
+    }, [session.askingStateSave]);
+
     useFilePickerClose(romInputRef, () => release("romPicker"));
     useFilePickerClose(loadStateRef, () => release("statePicker"));
 
@@ -395,7 +401,13 @@ const App = () => {
         const file = input?.files?.[0];
         if (input) input.value = "";
         if (file) {
-            void session.loadState(file).finally(() => release("statePicker"));
+            void session
+                .loadState(file)
+                // ゲーム内セーブを置き換えるかを聞くなら、ファイル選択を外す前に止めておく（その間に再開しないように）
+                .then(asking => {
+                    if (asking) hold("stateSaveConfirm");
+                })
+                .finally(() => release("statePicker"));
         } else {
             release("statePicker");
         }
@@ -652,6 +664,20 @@ const App = () => {
                     closeLoadConfirm();
                 }}
                 onCancel={closeLoadConfirm}
+            />
+            <ConfirmDialog
+                open={session.askingStateSave}
+                title="ゲーム内セーブも置き換えますか？"
+                message="この端末のゲーム内セーブを、このファイルのものに置き換えます。置き換える前のセーブは戻せません。「いいえ」なら状態だけをロードします。"
+                confirmLabel="はい"
+                onConfirm={() => {
+                    session.answerStateSave(true);
+                    release("stateSaveConfirm");
+                }}
+                onCancel={() => {
+                    session.answerStateSave(false);
+                    release("stateSaveConfirm");
+                }}
             />
             <ConfirmDialog
                 open={confirmingOldSaves !== null}

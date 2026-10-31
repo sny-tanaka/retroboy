@@ -6,7 +6,8 @@
 // - 音: 左右の float の列。1 フレーム進めるたびに、そのフレームの分を読み出しておく（gba_audio_*）。
 // - ゲーム内セーブ: 128KB（フラッシュ 1M の大きさ）の領域を mGBA に渡し、ゲームはそこへ直に書く。
 //   JS は gba_save_data / gba_save_size で中身を読み、変わっていれば保存する。読み込むときは gba_load に渡す。
-// - セーブステート: mGBA の形式（RTC を含め、ゲーム内セーブは含めない。libretro と同じ）。
+// - セーブステート: mGBA の形式（RTC を含める）。ファイルに書き出す（.ss1）ときはゲーム内セーブも含める
+//   （別の端末へ引っ越せるように）。端末の中の枠には含めない（ロードでゲーム内セーブが巻き戻らないように）。
 // - 通信ケーブル: いちばん下の gba_link_*（docs/link-cable-design.md 8 章）。
 #include <stdlib.h>
 #include <string.h>
@@ -22,6 +23,7 @@
 #include <mgba/internal/gba/io.h>
 #include <mgba/internal/gba/sio.h>
 #include <mgba/internal/gba/video.h>
+#include <mgba-util/memory.h>
 #include <mgba-util/vfs.h>
 
 #define WIDTH 240
@@ -176,15 +178,16 @@ EMSCRIPTEN_KEEPALIVE void gba_title(char* buffer) {
 	if (core) core->getGameTitle(core, buffer);
 }
 
-// セーブステートを作る。戻り値は長さ（失敗なら 0）。中身は gba_state_buffer の先（次の gba_state_save まで有効）
-EMSCRIPTEN_KEEPALIVE size_t gba_state_save(void) {
+// セーブステートを作る。withSave が 0 でなければゲーム内セーブも含める。戻り値は長さ（失敗なら 0）。
+// 中身は gba_state_buffer の先（次の gba_state_save まで有効）
+EMSCRIPTEN_KEEPALIVE size_t gba_state_save(int withSave) {
 	if (!core) return 0;
 	free(stateBuffer);
 	stateBuffer = NULL;
 	struct VFile* vf = VFileMemChunk(NULL, 0);
 	if (!vf) return 0;
 	size_t size = 0;
-	if (mCoreSaveStateNamed(core, vf, SAVESTATE_RTC)) {
+	if (mCoreSaveStateNamed(core, vf, SAVESTATE_RTC | (withSave ? SAVESTATE_SAVEDATA : 0))) {
 		size = vf->size(vf);
 		stateBuffer = malloc(size);
 		if (stateBuffer) {
@@ -209,14 +212,50 @@ EMSCRIPTEN_KEEPALIVE uint8_t* gba_state_alloc(size_t size) {
 	return stateBuffer;
 }
 
-// gba_state_alloc の先に書いたセーブステートを読む。1 で成功
-EMSCRIPTEN_KEEPALIVE int gba_state_load(size_t size) {
+// gba_state_alloc の先に書いたセーブステートに、ゲーム内セーブが含まれているか（1 で含まれている）
+EMSCRIPTEN_KEEPALIVE int gba_state_has_save(size_t size) {
 	if (!core || !stateBuffer) return 0;
 	struct VFile* vf = VFileFromConstMemory(stateBuffer, size);
 	if (!vf) return 0;
-	bool ok = mCoreLoadStateNamed(core, vf, SAVESTATE_RTC);
+	struct mStateExtdata extdata;
+	mStateExtdataInit(&extdata);
+	struct mStateExtdataItem item;
+	bool has = mCoreExtractExtdata(core, vf, &extdata) && mStateExtdataGet(&extdata, EXTDATA_SAVEDATA, &item) && item.data;
+	mStateExtdataDeinit(&extdata);
 	vf->close(vf);
-	return ok ? 1 : 0;
+	return has ? 1 : 0;
+}
+
+// gba_state_alloc の先に書いたセーブステートを読む。withSave が 0 でなければ、含まれているゲーム内セーブも
+// いまのゲーム内セーブ（gba_save_buffer）に書き込む。戻り値: 0 失敗、1 成功、2 状態は読めたがゲーム内セーブは
+// 書き込めなかった。
+// mCoreLoadStateNamed は使わない。あれはゲーム内セーブが含まれていると、置き換えないときも mGBA の中で
+// 一時的に差し替える（GBASavedataMask。ゲームが書いたセーブが gba_save_buffer に届かなくなる）ため。
+// 状態と RTC の読み方は mCoreLoadStateNamed（src/core/serialize.c）と同じ
+EMSCRIPTEN_KEEPALIVE int gba_state_load(size_t size, int withSave) {
+	if (!core || !stateBuffer) return 0;
+	struct VFile* vf = VFileFromConstMemory(stateBuffer, size);
+	if (!vf) return 0;
+	struct mStateExtdata extdata;
+	mStateExtdataInit(&extdata);
+	void* state = mCoreExtractState(core, vf, &extdata);
+	vf->close(vf);
+	if (!state) {
+		mStateExtdataDeinit(&extdata);
+		return 0;
+	}
+	bool ok = core->loadState(core, state);
+	mappedMemoryFree(state, core->stateSize(core));
+	int result = ok ? 1 : 0;
+	struct mStateExtdataItem item;
+	if (ok && withSave && mStateExtdataGet(&extdata, EXTDATA_SAVEDATA, &item) && item.data) {
+		if (!core->savedataRestore(core, item.data, item.size, true)) result = 2;
+	}
+	if (ok && mStateExtdataGet(&extdata, EXTDATA_RTC, &item) && core->rtc.d.deserialize) {
+		core->rtc.d.deserialize(&core->rtc.d, &item);
+	}
+	mStateExtdataDeinit(&extdata);
+	return result;
 }
 
 // ---- 通信ケーブル（docs/link-cable-design.md 8 章）----

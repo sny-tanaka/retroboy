@@ -20,10 +20,11 @@ export interface MgbaModule {
     _gba_frame_rate_milli(): number;
     _gba_save_size(): number;
     _gba_title(buffer: number): void;
-    _gba_state_save(): number;
+    _gba_state_save(withSave: number): number;
     _gba_state_buffer(): number;
     _gba_state_alloc(size: number): number;
-    _gba_state_load(size: number): number;
+    _gba_state_has_save(size: number): number;
+    _gba_state_load(size: number, withSave: number): number;
     // 通信ケーブル（mgba-glue.c のいちばん下）
     _gba_link_set_connected(connected: number): void;
     _gba_link_clock(): number;

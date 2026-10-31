@@ -25,6 +25,7 @@ import {
 } from "../emulator/cartridgeEffects";
 import { resetPerfStats } from "../emulator/perfStats";
 import {
+    applyGbaStateFile,
     applySaveStateBytes,
     captureSaveState,
     downloadSaveState,
@@ -693,9 +694,41 @@ const useRomSession = () => {
         }
     };
 
-    const loadState = async (file: File): Promise<void> => {
-        if (linkedRef.current) return;
-        setNotice(await loadSaveStateFile(file));
+    // ゲーム内セーブを含む .ss1 を読んで、置き換えるかを聞いている間の、そのファイル（どの ROM で読んだかと一緒に）
+    const [askingStateSave, setAskingStateSave] = useState<{
+        readonly romId: string;
+        readonly data: Uint8Array;
+    } | null>(null);
+
+    // メニューの「ファイルから読み込む」。ゲーム内セーブを含む .ss1 なら、適用せずに置き換えるかを聞く（true を返す）
+    const loadState = async (file: File): Promise<boolean> => {
+        if (linkedRef.current) return false;
+        const romId = runningRomIdRef.current;
+        const result = await loadSaveStateFile(file);
+        if (result.kind === "done") {
+            setNotice(result.error);
+            return false;
+        }
+        // 読んでいる間に ROM を切り替えた・止めた・つないだなら、何もしない
+        if (!romId || romId !== runningRomIdRef.current || linkedRef.current) {
+            return false;
+        }
+        setAskingStateSave({ romId, data: result.data });
+        return true;
+    };
+
+    // 上の問いの答え。はい（withSave）なら状態とゲーム内セーブ、いいえなら状態だけを戻す
+    const answerStateSave = (withSave: boolean): void => {
+        const asking = askingStateSave;
+        setAskingStateSave(null);
+        if (
+            !asking ||
+            asking.romId !== runningRomIdRef.current ||
+            linkedRef.current
+        ) {
+            return;
+        }
+        setNotice(applyGbaStateFile(asking.data, withSave));
     };
 
     // メニューの「古い版のセーブを消す」で消せる内蔵ソフトの古い版（メニューを出すときに数える）
@@ -738,6 +771,12 @@ const useRomSession = () => {
         loadFromSlot,
         exportStateFile,
         loadState,
+        // 問いを出すのは、読んだ ROM がまだ動いている間だけ
+        askingStateSave:
+            askingStateSave !== null &&
+            status.kind === "running" &&
+            askingStateSave.romId === status.rom.id,
+        answerStateSave,
         listOldSaves,
         deleteOldSaves,
     };

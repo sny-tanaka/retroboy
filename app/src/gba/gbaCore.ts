@@ -183,20 +183,41 @@ export class GbaCore {
         return this.module.HEAPU8.slice(pointer, pointer + size);
     }
 
-    /** セーブステート（mGBA の形式）。作れなければ null */
-    saveState(): Uint8Array | null {
-        const size = this.module._gba_state_save();
+    /**
+     * セーブステート（mGBA の形式）。withSave ならゲーム内セーブも含める（ファイルに書き出すとき）。
+     * 作れなければ null
+     */
+    saveState(withSave: boolean): Uint8Array | null {
+        const size = this.module._gba_state_save(withSave ? 1 : 0);
         if (size === 0) return null;
         const pointer = this.module._gba_state_buffer();
         return this.module.HEAPU8.slice(pointer, pointer + size);
     }
 
-    /** セーブステートを読む。別のゲームのものや壊れたものなら false */
-    loadState(data: Uint8Array): boolean {
+    /** セーブステートにゲーム内セーブが含まれているか（ファイルに書き出したもの。前の版のファイルには無い） */
+    stateHasSave(data: Uint8Array): boolean {
         const pointer = this.module._gba_state_alloc(data.length);
         if (!pointer) return false;
         this.module.HEAPU8.set(data, pointer);
-        return this.module._gba_state_load(data.length) === 1;
+        return this.module._gba_state_has_save(data.length) === 1;
+    }
+
+    /**
+     * セーブステートを読む。withSave なら、含まれているゲーム内セーブでいまのゲーム内セーブも置き換える。
+     * 別のゲームのものや壊れたものなら "error"、状態は戻せたがゲーム内セーブは置き換えられなかったら "saveError"
+     */
+    loadState(
+        data: Uint8Array,
+        withSave: boolean,
+    ): "ok" | "error" | "saveError" {
+        const pointer = this.module._gba_state_alloc(data.length);
+        if (!pointer) return "error";
+        this.module.HEAPU8.set(data, pointer);
+        const result = this.module._gba_state_load(
+            data.length,
+            withSave ? 1 : 0,
+        );
+        return result === 1 ? "ok" : result === 2 ? "saveError" : "error";
     }
 }
 
