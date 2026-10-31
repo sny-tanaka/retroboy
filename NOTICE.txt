@@ -1,0 +1,125 @@
+Retro Boy Snap
+Copyright 2026 Shunya Tanaka
+
+This product includes software developed as part of Retro Boy
+(https://github.com/smparsons/retroboy), licensed under the Apache License,
+Version 2.0. Copyright smparsons.
+
+配信物（app/dist/）には、このファイル（NOTICE.txt）と、このリポジトリの LICENSE（LICENSE.txt）と、
+下に挙げるものそれぞれのライセンスの全文（licenses/ の下）を入れる（app/plugins/licenseFiles.ts）。
+全文が取ってきたコア（core/upstream/）や node_modules に無いものは、リポジトリの licenses/ に置いている。
+
+- Retro Boy 本家のコアは、コミット edf90d9fb192372a657a18d44f5c9841805fa554（core/upstream.rev）を
+  ビルドのときに取ってきて、core/patches/ のパッチ（通信ケーブルのための serial の変更など）を当てて使う。
+  本家のコードそのものはリポジトリに含めない（パッチだけを含む）。変更した本家のファイルは、パッチの中に
+  変更点を記している。ビルドした WASM（app/src/core/ に生成）を配信物に含む。
+  → licenses/retroboy-LICENSE.txt
+- app/src/emulator/ のつなぎのコードは Retro Boy の frontends/web から移したもので、
+  各ファイルの先頭に出どころ（本家のパスとコミット）と変更点を記している。
+
+ビルドした WASM には、次の Rust のクレートと Rust の標準ライブラリが入る（どれも MIT か Apache-2.0 の選択）。
+MIT の著作権表示と許諾の文を入れる。
+- wasm-bindgen 0.2.100 (https://github.com/rustwasm/wasm-bindgen) → licenses/wasm-bindgen-LICENSE-MIT.txt
+- console_error_panic_hook 0.1.7 → licenses/console_error_panic_hook-LICENSE-MIT.txt
+- cfg-if 1.0.1 → licenses/cfg-if-LICENSE-MIT.txt
+- once_cell 1.21.3 → licenses/once_cell-LICENSE-MIT.txt
+  （この 4 つは crates.io の配布物の LICENSE-MIT をそのまま写した）
+- Rust の標準ライブラリ (https://www.rust-lang.org) → licenses/rust-std-LICENSE-MIT.txt
+  Copyright The Rust Project Developers. rustup の toolchain の share/doc/rust/licenses/MIT.txt に、
+  COPYRIGHT-library.html にある著作権者を入れたもの。標準ライブラリの library/core/src/unicode は
+  Unicode License v3（Copyright 1991-2024 Unicode, Inc.）→ licenses/rust-std-unicode-LICENSE.txt
+  （同じ toolchain の Unicode-3.0.txt）。
+
+GBA のゲームは mGBA (https://mgba.io/ ・ https://github.com/mgba-emu/mgba) のコアで動かす。
+Copyright © 2013 – 2022 Jeffrey Pfau（本家の README のとおり）。Mozilla Public License 2.0。
+  → licenses/mgba-LICENSE.txt
+- 本家のコミット 26b7884bc25a5933960f3cdcd98bac1ae14d42e2（0.10.5 のタグ。mgba/upstream.rev）をビルドのときに
+  取ってきて、mgba/patches/ のパッチ（Emscripten ではスレッドを使わずに作る CMake の変更）を当て、
+  GBA のコアだけを WASM（app/src/gba/core/ に生成）にして配信物に含む。本家のコードそのものはリポジトリに含めない。
+- MPL-2.0 の 3.2 の「ソースの入手のしかた」: 配信物の mGBA のソースは、上の本家のコミットと、このリポジトリ
+  （https://github.com/sny-tanaka/retroboy）の mgba/patches/・mgba/glue/・scripts/build-mgba.sh で全部そろう。
+- mgba/glue/mgba-glue.c（JS から呼ぶ口）は mGBA の src/platform/libretro/libretro.c の使い方に倣って書いたもの。
+mGBA の WASM には、mGBA に入っている次の第三者のコードも入る:
+- blip_buf 1.1.0 (http://www.slack.net/~ant/) Copyright (C) 2003-2009 Shay Green。
+  GNU Lesser General Public License 2.1 以降。→ licenses/blip_buf-LICENSE.txt
+  静的にリンクしているので、LGPL の求め（利用者が手を加えた blip_buf でリンクし直せること）には、上のとおり
+  ソースとビルドの手順（scripts/build-mgba.sh）を全部公開していることで応える。
+- inih (https://github.com/benhoyt/inih) Copyright (C) 2009-2020, Ben Hoyt。BSD-3-Clause。→ licenses/inih-LICENSE.txt
+mGBA の WASM と、それを読み込む JS（mgbaCore.js）は Emscripten 5.0.7 (https://emscripten.org) で作り、
+Emscripten の実行時のコード・C の標準ライブラリ（musl）・compiler-rt が入る。それぞれのライセンスの全文を入れる
+（emsdk 5.0.7 の upstream/emscripten の LICENSE・system/lib/libc/musl/COPYRIGHT・system/lib/compiler-rt/LICENSE.TXT を写した）。
+- Emscripten: MIT か University of Illinois/NCSA の選択。Copyright (c) 2010-2014 Emscripten authors。→ licenses/emscripten-LICENSE.txt
+- musl: MIT。Copyright © 2005-2020 Rich Felker, et al.。→ licenses/musl-COPYRIGHT.txt
+- compiler-rt: Apache License 2.0 with LLVM Exceptions。→ licenses/compiler-rt-LICENSE.txt
+
+内蔵ソフト「テイマーズライフ」の GBA の ROM（games/tamers-life-gba/tamers-life-gba.gba）は、Rust の agb で作り
+（ソースは非公開の別のリポジトリ。ROM と、下のクレートのライセンスの全文だけを配る）、次のクレートと Rust の標準ライブラリが入る。
+クレートの版は ROM を作ったときの Cargo.lock のもので、どれも crates.io (https://crates.io/) の配布物をそのまま使っている。
+- agb 0.25.0・agb_fixnum 0.25.0・agb_hashmap 0.25.0・agb_save 0.25.0 (https://github.com/agbrs/agb)
+  Corwin Kuiper, Gwilym Inzani ほか。Mozilla Public License 2.0。
+  → licenses/agb-LICENSE.txt（クレートの配布物に全文が無いので、本家のタグ v0.25.0〔コミット 76366536223527cb8c48fc4ddc5f9e34b75c97f9〕の LICENSE を写した）
+  MPL-2.0 の 3.2 の「ソースの入手のしかた」: ROM に入る agb のソースは手を加えておらず、crates.io の
+  https://crates.io/crates/agb/0.25.0 ・ agb_fixnum/0.25.0 ・ agb_hashmap/0.25.0 ・ agb_save/0.25.0 の配布物
+  （と、本家のタグ v0.25.0）がそのままソースになる。
+- agb の中の agbabi（src/agbabi/。memcpy・memset など）Copyright (C) 2021-2023 agbabi contributors。zlib License。
+  → licenses/agbabi-LICENSE.txt
+- serde 1.0.229・serde_core 1.0.229 (https://github.com/serde-rs/serde) → licenses/serde-LICENSE-MIT.txt
+- postcard 1.1.3 → licenses/postcard-LICENSE-MIT.txt
+- cobs 0.3.0 → licenses/cobs-LICENSE-MIT.txt
+- bilge 0.3.0 → licenses/bilge-LICENSE-MIT.txt
+- const_soft_float 0.1.4 → licenses/const_soft_float-LICENSE-MIT.txt
+- critical-section 1.2.0 → licenses/critical-section-LICENSE-MIT.txt
+- num-traits 0.2.19 → licenses/num-traits-LICENSE-MIT.txt
+- once_cell 1.21.4 → licenses/once_cell-LICENSE-MIT.txt（WASM の 1.21.3 と同じ文）
+- portable-atomic 1.15.0 → licenses/portable-atomic-LICENSE-MIT.txt
+- rustc-hash 2.1.3 → licenses/rustc-hash-LICENSE-MIT.txt
+- thiserror 2.0.21 → licenses/thiserror-LICENSE-MIT.txt
+  （ここまでの 11 は MIT か Apache-2.0 の選択。crates.io の配布物の LICENSE-MIT をそのまま写した）
+- arbitrary-int 2.2.0 Copyright (c) 2022 Daniel Lehmann。MIT。→ licenses/arbitrary-int-LICENSE.txt（配布物の LICENSE.txt）
+- crc16 0.4.0 Copyright (c) 2016 Anatoly Ikorsky。MIT か Apache-2.0 の選択。→ licenses/crc16-LICENSE-MIT.txt
+- qrcodegen-no-heap 1.8.1 (https://www.nayuki.io/page/qr-code-generator-library) Copyright (c) Project Nayuki。MIT。
+  → licenses/qrcodegen-no-heap-LICENSE.txt（配布物に LICENSE が無いので、src/lib.rs の頭の許諾の文を写した）
+- typewit 1.15.2 Copyright (c) 2023 Matias Rodriguez。zlib License。→ licenses/typewit-LICENSE-ZLIB.txt
+- Rust の標準ライブラリ（core・alloc。nightly-2026-07-20 の rust-src から build-std で作る）→ 上の licenses/rust-std-LICENSE-MIT.txt・
+  licenses/rust-std-unicode-LICENSE.txt。compiler_builtins 0.1.160（libm を含む）は MIT と Apache-2.0 with LLVM Exception
+  → licenses/compiler-builtins-LICENSE.txt（同じ toolchain の library/compiler-builtins/LICENSE.txt）
+テイマーズライフの攻略サイト（guide/）の JS にも、下の React・React DOM・scheduler が入る（同じ全文で足りる）。
+
+画面（JS のバンドル）に次の npm のパッケージが入る。バンドルには著作権表示が残らないので、全文を入れる。
+バンドルにここに無いパッケージが入ると、ビルドが止まる。
+- React・React DOM・scheduler (https://github.com/facebook/react)
+  Copyright (c) Meta Platforms, Inc. and affiliates. MIT License.
+  → licenses/react-LICENSE.txt・licenses/react-dom-LICENSE.txt・licenses/scheduler-LICENSE.txt
+- qrcode-generator 2.0.4 (https://github.com/kazuhikoarase/qrcode-generator)（通信ケーブルの画面 app/src/link/qr.ts）
+  Copyright (c) 2009 Kazuhiko Arase. MIT License.
+  The word "QR Code" is registered trademark of DENSO WAVE INCORPORATED.
+  → licenses/qrcode-generator-LICENSE.txt（npm の配布物に LICENSE が無いので、GitHub のタグ js2.0.4 の LICENSE を写した）
+- jsQR (https://github.com/cozmo/jsQR)（同じ画面）
+  Licensed under the Apache License, Version 2.0. → licenses/jsqr-LICENSE.txt
+
+自作ゲーム「テイマーズライフ」（内蔵ソフト games/tamers-life-gba/。ソースは非公開の別のリポジトリ）の文字の形に、
+美咲フォントを使い、使う字だけを切り出して ROM（配信物）に含む。
+- 美咲フォント 2021-05-05 版 (https://littlelimit.net/misaki.htm)
+  Copyright (C) 2002-2021 Num Kadoma
+  「These fonts are free softwares. Unlimited permission is granted to use, copy, and distribute it,
+  with or without modification, either commercially and noncommercially.
+  THESE FONTS ARE PROVIDED "AS IS" WITHOUT WARRANTY.」（同梱の misaki.txt の「ライセンス」）
+  → licenses/misaki-font.txt
+  ▶ と ◀ は美咲フォントに無いので、自分で描いた。
+
+自作の GBA のデモ「GBA ベンチ」（games/gba-bench/）は、LLVM の clang と lld で作る。ライブラリ（libc・compiler-rt）は
+リンクしない（-nostdlib。起動のコード・字の形・sin の表も自分で書いた）ので、ROM に第三者のコードは入らない。
+
+自作ゲーム（games/）の ROM は GBDK-2020 (https://github.com/gbdk-2020/gbdk-2020) で作っており、
+ROM に GBDK のライブラリ（crt0 など）が入る。GBDK のライブラリは GPLv2 にリンクの例外を付けたもの
+（GBDK-2020 の配布物の licenses/LICENSE_GPLV2_LE）で、ROM に入れても ROM 全体に GPL はかからない。
+  例外の文の中で表示は求められていないので、全文は入れない。GBDK のうち別のライセンスのもの（ZX0・gbcompress・
+  crash handler など）は使っていない。
+
+Retro Boy のコアには次のブート ROM が含まれる（本家の src/bios.rs）。コアの配布物に全文が無いので、
+それぞれのリポジトリの LICENSE を写した。
+- DMG: Bootix (https://github.com/Hacktix/Bootix)。CC0 1.0 Universal。
+  → licenses/bootix-LICENSE.txt（コミット e2121d0f2e5665efd87b53b53d16ea61775898f3 の LICENSE）
+- CGB: SameBoy の CGB ブート ROM を本家がカスタマイズしたもの (https://github.com/LIJI32/SameBoy)
+  Copyright (c) 2015-2026 Lior Halphon. Expat License (MIT).
+  → licenses/sameboy-LICENSE.txt（コミット e7da9386e1533268b7e9de73450e070b1498d1bf の LICENSE）
