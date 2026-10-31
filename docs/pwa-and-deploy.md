@@ -4,9 +4,9 @@
 
 ## 全体
 
-- 配信先は GitHub Pages（https://sny-tanaka.github.io/retroboy-snap/）。リポジトリは public で、配信物も誰でも見られる。前は Netlify の Private で配っていたが、無料プランのクレジットが足りなくなるので移した。
+- 配信先は GitHub Pages（https://sny-tanaka.github.io/retroboy/）。リポジトリは public で、配信物も誰でも見られる。前は Netlify の Private で配っていたが、無料プランのクレジットが足りなくなるので移した。
 - ビルドは手元で行い、できた `app/dist/` の中身だけを 1 コミットにして `gh-pages` ブランチに強制で push する（`npm run deploy` → `scripts/deploy-pages.sh`）。Pages は「ブランチから配信」で `gh-pages` の `/` を配る。GitHub Actions で Rust・wasm-pack・GBDK を用意しなくてよい。
-- サブパス（`/retroboy-snap/`）の下で配るので、アプリは自分の置き場所からの相対パスですべてを参照する（下の「サブパス」）。
+- サブパス（`/retroboy/`）の下で配るので、アプリは自分の置き場所からの相対パスですべてを参照する（下の「サブパス」）。
 - 配信するのはアプリ本体（HTML・JS・WASM・アイコン・manifest・Service Worker）と内蔵ソフト（`games/` の自作ゲームの ROM と目録。`docs/builtin-games.md`）だけ。利用者が追加した ROM・ゲーム内セーブ・セーブステートは端末の中だけにあり、配信先には置かない（設計書 6 章）。
 
 ## ファイル
@@ -105,14 +105,14 @@ npm run preview    # http://localhost:4173（base が ./ なので / でもそ�
 
 ## サブパス
 
-Pages では https://sny-tanaka.github.io/retroboy-snap/ のように `/retroboy-snap/` の下で配る。`/` を前提にしたところが無いようにしている。
+Pages では https://sny-tanaka.github.io/retroboy/ のように `/retroboy/` の下で配る。`/` を前提にしたところが無いようにしている。
 
 | ところ | 書き方 |
 |---|---|
 | `vite.config.ts` | `base: "./"`。`index.html` の JS・CSS・manifest・アイコン、JS の中の WASM はすべて `./` からの相対になる（サブパスでも `/` でも動く）。開発サーバーでは `/` として扱われる |
 | `index.html` | manifest と apple-touch-icon は `/manifest.webmanifest` のように書く。ビルドで vite が `./` に書き換える |
-| `manifest.webmanifest` | `id`・`start_url`・`scope` は `./`、アイコンは `icons/…`。manifest の URL からの相対なので `/retroboy-snap/` になる |
-| `registerServiceWorker.ts` | `sw.js` と `version.json` は `import.meta.env.BASE_URL`（ビルドでは `./`）から。スコープは `sw.js` の置き場所（`/retroboy-snap/`） |
+| `manifest.webmanifest` | `id`・`start_url`・`scope` は `./`、アイコンは `icons/…`。manifest の URL からの相対なので `/retroboy/` になる |
+| `registerServiceWorker.ts` | `sw.js` と `version.json` は `import.meta.env.BASE_URL`（ビルドでは `./`）から。スコープは `sw.js` の置き場所（`/retroboy/`） |
 | `sw.template.js` | 事前キャッシュの一覧（`PRECACHE`）は相対パスで、スコープからの URL にして取る。`index.html` はスコープそのもの（`./`）をキーにする |
 | 内蔵ソフト | `builtin/…` を `BASE_URL` から取る（`app/src/storage/builtinGames.ts`） |
 

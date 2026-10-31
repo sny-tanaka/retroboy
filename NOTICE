@@ -37,7 +37,7 @@ Copyright © 2013 – 2022 Jeffrey Pfau（本家の README のとおり）。Moz
   取ってきて、mgba/patches/ のパッチ（Emscripten ではスレッドを使わずに作る CMake の変更）を当て、
   GBA のコアだけを WASM（app/src/gba/core/ に生成）にして配信物に含む。本家のコードそのものはリポジトリに含めない。
 - MPL-2.0 の 3.2 の「ソースの入手のしかた」: 配信物の mGBA のソースは、上の本家のコミットと、このリポジトリ
-  （https://github.com/sny-tanaka/retroboy-snap）の mgba/patches/・mgba/glue/・scripts/build-mgba.sh で全部そろう。
+  （https://github.com/sny-tanaka/retroboy）の mgba/patches/・mgba/glue/・scripts/build-mgba.sh で全部そろう。
 - mgba/glue/mgba-glue.c（JS から呼ぶ口）は mGBA の src/platform/libretro/libretro.c の使い方に倣って書いたもの。
 mGBA の WASM には、mGBA に入っている次の第三者のコードも入る:
 - blip_buf 1.1.0 (http://www.slack.net/~ant/) Copyright (C) 2003-2009 Shay Green。

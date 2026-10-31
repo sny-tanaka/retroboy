@@ -56,7 +56,7 @@ const versionFile = (): Plugin => ({
 });
 
 export default defineConfig({
-    // 本番ビルドは相対パスで参照する（GitHub Pages の https://sny-tanaka.github.io/retroboy-snap/ のような
+    // 本番ビルドは相対パスで参照する（GitHub Pages の https://sny-tanaka.github.io/retroboy/ のような
     // サブパスでも、vite preview の / でも、そのまま動く）。開発サーバーでは "/" として扱われる
     base: "./",
     // 内蔵ソフトの攻略サイト（テイマーズライフの guide/）は、できたものを games/<id>/ に置いてあり、builtinGames() が dist に写す

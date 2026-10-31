@@ -16,7 +16,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DIST="$ROOT/app/dist"
 BRANCH="gh-pages"
-PAGES_URL="https://sny-tanaka.github.io/retroboy-snap/"
+PAGES_URL="https://sny-tanaka.github.io/retroboy/"
 AUTHOR_NAME="sny-tanaka"
 AUTHOR_EMAIL="36751082+sny-tanaka@users.noreply.github.com"
 

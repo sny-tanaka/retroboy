@@ -15,7 +15,7 @@
 
 const CACHE_PREFIX = "retroboy-snap-";
 const CACHE_NAME = `${CACHE_PREFIX}${VERSION}`;
-// index.html のキャッシュのキー（GitHub Pages では /retroboy-snap/ が index.html を返す）。
+// index.html のキャッシュのキー（GitHub Pages では /retroboy/ が index.html を返す）。
 // 置き場所（スコープ）からの相対で決めるので、サブパスでも / でも同じように動く
 const SHELL_URL = new URL("./", self.registration.scope).href;
 // ページを開くとき、これより遅ければネットワークをあきらめてキャッシュから出す

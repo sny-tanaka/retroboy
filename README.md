@@ -191,7 +191,7 @@ WASM のビルド（Retro Boy と mGBA）→ コアの試験（テスト ROM の
 
 ## GitHub Pages に公開する
 
-GitHub Pages で https://sny-tanaka.github.io/retroboy-snap/ に配信する（リポジトリは public）。ビルドは手元で行い、`app/dist/` の中身だけを 1 コミットにして `gh-pages` ブランチに強制で push する（GitHub Actions は使わない）。仕組みは `docs/pwa-and-deploy.md`。
+GitHub Pages で https://sny-tanaka.github.io/retroboy/ に配信する（リポジトリは public）。ビルドは手元で行い、`app/dist/` の中身だけを 1 コミットにして `gh-pages` ブランチに強制で push する（GitHub Actions は使わない）。仕組みは `docs/pwa-and-deploy.md`。
 
 配信物は誰でも見られる。入るのはアプリ本体・内蔵の自作ソフト・ライセンスの文書だけで、市販の ROM は入らない（`app/dist` に ROM が入るとビルドが止まる）。検索エンジンには `index.html` の `<meta name="robots" content="noindex, nofollow">` で載せないように伝える（Pages ではヘッダーを付けられない）。
 
@@ -213,22 +213,22 @@ npm run deploy     # npm run check → app/dist を gh-pages に 1 コミット�
 1. `npm run check`（WASM のビルド・コアの試験・型チェック・lint・本番ビルド・Service Worker の生成と ROM の検査）。
 2. `app/dist/` を一時ディレクトリに写し、そこで新しい git リポジトリを作って 1 コミットにする（作業中のブランチや作業ツリーには触らない）。作者は `sny-tanaka <36751082+sny-tanaka@users.noreply.github.com>`。
 3. `origin` の `gh-pages` に強制で push する（前の版は残さない）。
-4. https://sny-tanaka.github.io/retroboy-snap/version.json を 15 秒おきに取り、いま出した版の `buildId` になったら終わる（10 分で見切る）。
+4. https://sny-tanaka.github.io/retroboy/version.json を 15 秒おきに取り、いま出した版の `buildId` になったら終わる（10 分で見切る）。
 
 push せずに中身だけ見たいときは `npm run deploy -- --dry-run`（コミットを作った一時ディレクトリの場所を出す）。
 
 出したあと手で確かめるとき:
 
 ```sh
-curl -sS -o /dev/null -w '%{http_code}\n' https://sny-tanaka.github.io/retroboy-snap/version.json   # 200
-curl -sS https://sny-tanaka.github.io/retroboy-snap/version.json                                     # 出した版
-curl -sSI https://sny-tanaka.github.io/retroboy-snap/ | grep -i content-type                        # text/html
-curl -sSI "https://sny-tanaka.github.io/retroboy-snap/$(curl -sS https://sny-tanaka.github.io/retroboy-snap/sw.js | grep -o 'assets/[^"]*\.wasm')" | grep -i content-type   # application/wasm
+curl -sS -o /dev/null -w '%{http_code}\n' https://sny-tanaka.github.io/retroboy/version.json   # 200
+curl -sS https://sny-tanaka.github.io/retroboy/version.json                                     # 出した版
+curl -sSI https://sny-tanaka.github.io/retroboy/ | grep -i content-type                        # text/html
+curl -sSI "https://sny-tanaka.github.io/retroboy/$(curl -sS https://sny-tanaka.github.io/retroboy/sw.js | grep -o 'assets/[^"]*\.wasm')" | grep -i content-type   # application/wasm
 ```
 
 ### iPhone のホーム画面に入れる
 
-1. iPhone の Safari で https://sny-tanaka.github.io/retroboy-snap/ を開く。
+1. iPhone の Safari で https://sny-tanaka.github.io/retroboy/ を開く。
 2. 共有ボタン →「ホーム画面に追加」。
 3. ホーム画面のアイコンから開く。ホーム画面アプリは Safari と保存領域が別のことがあるので、ROM の追加とセーブの確かめはホーム画面アプリの中で行う（設計書 Step 7）。
 
