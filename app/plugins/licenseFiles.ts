@@ -7,7 +7,7 @@
 //   scripts/prepare-core.sh が取ってくる core/upstream/LICENSE
 // - licenses/mgba-LICENSE.txt・blip_buf-LICENSE.txt・inih-LICENSE.txt: GBA のコアの mGBA（MPL-2.0）と、その中に入る
 //   blip_buf（LGPL-2.1）・inih（BSD-3-Clause）。scripts/prepare-core.sh mgba が取ってくる mgba/upstream/ のもの
-// - licenses/<名前>-LICENSE*.txt・misaki-font.txt: リポジトリの licenses/ に置いたもの（内蔵ソフトのテイマーズライフの ROM に入る美咲フォントの説明書・ブート ROM・WASM に入る Rust のクレートと標準ライブラリ・
+// - licenses/<名前>-LICENSE*.txt・misaki-font.txt: リポジトリの licenses/ に置いたもの（内蔵ソフトのテイマーズライフの ROM に入る美咲フォントの説明書と Rust のクレート〔agb・serde など〕・ブート ROM・WASM に入る Rust のクレートと標準ライブラリ・
 //   mGBA の WASM に入る Emscripten の実行時・musl・compiler-rt・
 //   npm にライセンスの全文が入っていない qrcode-generator）を、そのまま写す
 // - licenses/<npm のパッケージ>-LICENSE.txt: JS のバンドルに入る npm のパッケージの LICENSE。バンドルは著作権表示を
